@@ -25,7 +25,34 @@ Philosophie : tu es l'orchestrateur, OpenCode est l'executant. Tu portes la conv
 
 ## 1. ReAct - explicitation avant dispatch
 
-A completer (MEK-264).
+Le pattern ReAct (Reasoning + Acting) demande que tu expliques ton raisonnement avant de passer a l'action. Pour ce skill : avant de dispatcher une tache a OpenCode, tu annonces brievement a l'utilisateur :
+
+1. Type de tache detecte : refactor / debug / explore / feature / multi-modules / etc.
+2. Agent OpenCode choisi et raison (build / plan / cowork-with-github)
+3. Mode d'execution : synchrone (_run) / background (_fire) / parallele (multiple _fire)
+4. Estimation de duree si pertinent (basee sur l'experience / par defaut)
+
+Pourquoi : reference canonique "Building Effective Agents" (Anthropic, fin 2024) - l'explicitation rend ton comportement previsible. L'utilisateur peut t'arreter avant que tu partes dans la mauvaise direction.
+
+Ne jamais dispatcher silencieusement. Toujours afficher un mini-bloc de plan.
+
+Template en mode standard :
+
+Je vais demander a OpenCode de [resume court de la tache]. C'est un [type de tache], donc j'utilise l'agent [build/plan] et je [synchronise/lance en background]. Estimation : [X min].
+
+[Dispatch]
+
+Template en mode dev :
+
+Detection :
+- Type de tache : refactor multi-fichiers
+- Mots-cles : "refactor", "module auth", "utiliser JWT"
+- Agent choisi : build (modifie le code) - provider anthropic par defaut
+- Outil : opencode_run (duree 1-15 min)
+- maxDurationSeconds : 600 (refactor moyen)
+- Pas de parallelisation (un seul module cible)
+
+[Dispatch]
 
 ## 2. Choix de l'outil OpenCode (ask / run / fire)
 
@@ -80,7 +107,53 @@ Exemple : "Lance en parallele un refactor sur auth, payments, et notifications" 
 
 ## 3. Choix de l'agent OpenCode (build / plan / @general)
 
-A completer (MEK-264).
+OpenCode (cf. anomalyco/opencode) inclut nativement deux agents principaux + un sous-agent.
+
+### Agents natifs
+
+build - agent full-access (defaut)
+- Lecture/ecriture/bash sans confirmation
+- Pour toute tache de modification reelle de code
+- C'est le bon defaut pour la grande majorite des taches
+
+plan - agent read-only / exploration
+- Ne modifie pas les fichiers par defaut
+- Demande confirmation avant d'executer du bash
+- Pour : "explique-moi", "review", "trouve", "analyse", "ou est defini X"
+- Plus sur pour les domaines non familiers
+
+### Sous-agent
+
+@general - pour recherches complexes multi-etapes
+- Invoque via mention dans le prompt (pas via le param agent:)
+- Pour : "trouve tous les usages de X dans les 5 services", "trace ce call path"
+- Utile combine avec build ou plan
+
+### Agents custom (livres par le plugin)
+
+En MVP : aucun. A partir de v1.5, le plugin livrera cowork-with-github (extension de build avec MCP GitHub). Pour le moment, si une tache necessite GitHub, fallback sur build et informer l'utilisateur que la PR sera manuelle.
+
+### Heuristique de routing
+
+| Type de prompt | Agent | Mots-cles indicatifs |
+|---|---|---|
+| Exploration / review / question | plan | "explique", "review", "comment marche", "trouve", "where is", "analyse" |
+| Modification / refactor / fix | build | "implemente", "ajoute", "fix", "refactor", "modifie", "ecris" |
+| Recherche multi-fichiers complexe | (build ou plan) + @general dans le prompt | "trouve tous les", "trace", "cross-service" |
+| GitHub / PR / issues | build (MVP) ou cowork-with-github (v1.5+) | "PR", "pull request", "issue", "GitHub" |
+
+### Exemples concrets
+
+| Prompt utilisateur | Agent + outil |
+|---|---|
+| "Explique-moi le flow d'authentification" | plan + opencode_ask |
+| "Implemente la pagination sur GET /users" | build + opencode_run (maxDur 300) |
+| "Trouve tous les endroits ou on appelle decryptToken et liste-les" | plan + opencode_ask avec @general dans le prompt |
+| "Refactor le module factions et cree une PR" | build (MVP) + opencode_run (maxDur 600), avec note "PR manuelle car cowork-with-github pas encore livre" |
+
+### Fallback si l'agent demande n'existe pas
+
+Avant tout dispatch, tu peux verifier la liste des agents disponibles via opencode_agent_list. Si l'agent vise (ex: cowork-with-github) n'est pas dispo localement, tu repli sur build et informes l'utilisateur.
 
 ## 4. Heuristique stall pendant pilotage actif
 
