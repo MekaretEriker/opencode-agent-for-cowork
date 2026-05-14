@@ -157,11 +157,105 @@ Avant tout dispatch, tu peux verifier la liste des agents disponibles via openco
 
 ## 4. Heuristique stall pendant pilotage actif
 
-A completer (MEK-265).
+Le pattern stall detection distingue un orchestrateur intelligent d'un poll naif. Quand tu pilotes une session OpenCode via opencode_run ou opencode_wait, tu monitores la progression entre les polls. Si OpenCode tourne en rond sans progres, tu sors proprement au lieu d'attendre le timeout.
+
+### Indicateurs de progres (issus de opencode_check)
+
+- filesChanged : nombre de fichiers modifies depuis le debut de la session
+- todosCompleted : nombre de todos termines
+- tokenUsage : peut indiquer activite meme sans output (moins fiable)
+
+### Heuristique
+
+1. Entre 2 appels consecutifs a opencode_check, compare ces compteurs au tour precedent
+2. Si AUCUN compteur n'a augmente sur 2 polls consecutifs (typiquement separes de 30-60s), stall detecte
+3. Action :
+   - opencode_session_summarize avec id, providerID, modelID pour capturer un resume du travail fait
+   - opencode_session_abort avec id pour sortir proprement
+   - Presenter a l'utilisateur le resume + l'option "tu veux que je redemarre avec un prompt plus precis ?"
+
+### Pseudo-code
+
+```
+files_prev = 0
+todos_prev = 0
+stall_count = 0
+
+while session_busy:
+  status = opencode_check(sessionId)
+  if status.filesChanged > files_prev OR status.todosCompleted > todos_prev:
+    files_prev = status.filesChanged
+    todos_prev = status.todosCompleted
+    stall_count = 0
+  else:
+    stall_count += 1
+    if stall_count >= 2:
+      summary = opencode_session_summarize(sessionId, ...)
+      opencode_session_abort(sessionId)
+      return present_to_user(summary, "stall detecte")
+  wait 30-60s
+```
+
+### Limite assumee
+
+Si l'utilisateur passe a un autre sujet pendant qu'OpenCode tourne, ce skill ne re-poll pas tout seul en background. Le stall detection ne fonctionne que dans le tour de conversation actif (cf. design doc R5).
+
+### Quand NE PAS appliquer
+
+- Taches opencode_fire que tu ne supervises pas activement
+- Taches tres courtes (moins de 1 min de timeout) ou le timeout naturel suffit
 
 ## 5. Politique de parallelisation (max 3 concurrentes)
 
-A completer (MEK-265).
+Cowork peut dispatcher plusieurs sessions OpenCode en parallele via opencode_fire, mais sans limite ca consomme RAM, quota provider, et peut creer des conflits de fichiers sur le meme repo.
+
+### Politique par defaut
+
+- Max 3 sessions concurrentes sur le meme projet (meme directory)
+- Au-dela : serialiser (lance les 3 premieres, attends qu'une finisse pour lancer la 4e)
+- Pas de limite intra-skill entre projets distincts - OpenCode et le provider LLM gerent leur propre rate limiting
+
+### Override par l'utilisateur
+
+Variable d'environnement OPENCODE_AGENT_MAX_PARALLEL (lue au demarrage via opencode_setup ou opencode_context). Valeurs raisonnables :
+- 1 = strictement sequentiel (machines modestes ou rate limit serre)
+- 3 = defaut
+- 5+ = pour machines puissantes avec providers tolerants
+
+### Detection proactive des conflits de fichiers
+
+Quand l'utilisateur demande 2+ taches sur le meme repo, detecte si elles risquent de toucher les memes fichiers avant de paralleliser :
+
+| Cas | Strategie |
+|---|---|
+| Taches sur modules/dossiers distincts | Parallele (jusqu'a 3) |
+| Taches sur meme module | Serie |
+| Taches d'ampleur globale (architecture, lint complet) | Serie |
+| Doute | Serie + demande a l'utilisateur |
+
+### Exemples concrets
+
+| Demande utilisateur | Strategie |
+|---|---|
+| "refactor le module auth ET ajoute des tests au module auth" | Memes fichiers probables -> serie |
+| "refactor le module auth ET refactor le module payments" | Fichiers distincts -> parallele OK |
+| "refactor toute la base de code" | Spectre large -> serie |
+
+### Exemple de dispatch parallele
+
+```
+fire(prompt: "cd /repo && refactor le module auth pour utiliser JWT") -> sessionId A
+fire(prompt: "cd /repo && ajoute la validation Zod aux endpoints payments") -> sessionId B
+fire(prompt: "cd /repo && documente les endpoints publics") -> sessionId C
+
+# Plus tard, l'utilisateur demande le statut
+sessions_overview() -> etat des 3
+check(A); check(B); check(C)
+```
+
+### Quand l'utilisateur demande plus que 3
+
+"Tu veux 5 refactors en parallele. Par defaut je limite a 3 concurrent pour ne pas saturer ton provider LLM. Je lance les 3 premiers maintenant et les 2 suivants des qu'une slot se libere. Tu confirmes, ou tu veux que j'override OPENCODE_AGENT_MAX_PARALLEL ?"
 
 ## 6. Install assistee OpenCode au 1er run
 
