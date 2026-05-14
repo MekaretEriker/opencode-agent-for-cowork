@@ -1,0 +1,16 @@
+# Build outputs
+*.plugin
+*.zip
+
+# Dev artifacts
+node_modules/
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Local memory (user workspace files, never committed at plugin level)
+.opencode-agent-memory.json
+.opencode-agent-traces/
