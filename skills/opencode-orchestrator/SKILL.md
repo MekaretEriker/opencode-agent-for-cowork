@@ -259,11 +259,94 @@ check(A); check(B); check(C)
 
 ## 6. Install assistee OpenCode au 1er run
 
-A completer (MEK-266).
+Au 1er run du skill sur la machine d'un utilisateur, OpenCode peut ne pas etre installe. Le skill detecte ca et propose l'install au lieu d'echouer en mode opaque.
+
+### Detection
+
+1. Au debut de chaque session orchestrator, appeler opencode_setup
+2. Si l'outil rapporte "opencode binary not found" ou erreur de connexion, on est dans le cas absent
+3. Si OK, on continue normalement (pas de re-detection a chaque tache)
+
+### Detection de l'OS
+
+Plusieurs methodes (utiliser celle qui marche en premier) :
+- Cowork connait son OS host (Windows/macOS/Linux/WSL)
+- Via bash sandbox : uname -a, contenu de /etc/os-release
+- En dernier recours : demander a l'utilisateur
+
+### Commandes d'install par plateforme
+
+Windows (PowerShell, primaire pour Mekaret) :
+```
+irm https://opencode.ai/install.ps1 | iex
+```
+Alternatives : scoop install opencode (si scoop installe), choco install opencode (si choco)
+
+macOS :
+```
+brew install anomalyco/tap/opencode
+```
+Alternative : curl -fsSL https://opencode.ai/install | bash
+
+Linux :
+```
+curl -fsSL https://opencode.ai/install | bash
+```
+Alternatives : npm i -g opencode-ai (si Node.js dispo), nix run nixpkgs#opencode (NixOS), sudo pacman -S opencode (Arch)
+
+WSL (Linux dans Windows) : equivalent Linux ci-dessus.
+
+### Flux UX (mode standard)
+
+Tu dis a l'utilisateur :
+
+"OpenCode n'est pas installe sur ta machine. Tu veux que je l'installe ? La commande sera :
+
+[commande adaptee a ton OS]
+
+Confirme avec 'oui' et je lance, ou refuse pour rester sans OpenCode."
+
+Si l'utilisateur confirme :
+1. Executer la commande via bash sandbox Cowork
+2. Attendre la fin du telechargement (30s-1min typiquement)
+3. Re-tester opencode_setup pour confirmer
+4. Si OK : "OpenCode installe ! Je peux attaquer ta tache."
+5. Si echec : presenter l'erreur et proposer install manuelle ou autre methode
+
+### Decisions explicites
+
+- Pas d'install silencieuse - validation utilisateur obligatoire
+- Pas de re-detection a chaque session - une fois installe, on assume
+- Pas de mise a jour automatique - si l'utilisateur veut updater, il le fait manuellement
 
 ## 7. Lecture AGENTS.md du repo cible
 
-A completer (MEK-266).
+OpenCode (cf. anomalyco/opencode) lit nativement un fichier AGENTS.md a la racine du repo cible pour injecter du contexte projet dans toutes ses sessions. C'est l'equivalent de CLAUDE.md cote Cowork.
+
+### Au debut de chaque tache OpenCode sur un nouveau projet
+
+1. Verifier si AGENTS.md existe a la racine du repo cible (test via opencode_file_read ou un cat dans le prompt)
+2. Si present :
+   - Lire le contenu
+   - Resumer en 2-3 lignes a l'utilisateur : "Ce projet a un AGENTS.md qui documente : X, Y, Z. Je vais en tenir compte."
+   - Pas besoin de l'inclure manuellement dans le prompt a OpenCode - OpenCode le lit deja nativement
+3. Si absent : ne rien faire de special, juste continuer
+
+### Que faire si l'utilisateur veut creer un AGENTS.md (en MVP)
+
+Le plugin NE CREE PAS d'AGENTS.md automatiquement en MVP. L'ecriture dans le repo cible vient en v1.5 avec opt-in explicite (cf. design doc Q9).
+
+Si l'utilisateur demande "tu peux creer un AGENTS.md pour ce projet ?" :
+- Proposer la creation comme une tache normale via OpenCode (agent build, opencode_run)
+- L'utilisateur valide le contenu avant le commit
+- Pas de balises HTML de section automatique en MVP - c'est manuel
+
+### Limites en MVP
+
+- Lecture seule : pas d'ecriture automatique
+- Pas de bootstrap auto sur nouveaux projets
+- Pas de sync depuis task-memory (n'existe pas encore en MVP, viendra en v1.2)
+- Tout ca arrive en v1.5 avec opt-in explicite par projet
 
 ## 8. Format de resultat (mode standard vs mode dev)
 
