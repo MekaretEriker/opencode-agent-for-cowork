@@ -2,7 +2,20 @@
 
 > Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
 
-**Statut** : v0.1.0 — MVP. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.1 -> v1.7.
+**Statut** : v0.1.1 — MVP + patch timeout. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.1 -> v1.7.
+
+## Changelog
+
+### v0.1.1 (patch timeout MCP)
+
+- §2 du SKILL.md : seuil opencode_run abaisse de "1-15 min" a "moins de 2-3 min" pour respecter le timeout MCP transport (~180s)
+- Au-dela de 3 min : fire+check par defaut (au lieu de attendre une exception)
+- Nouvelle sous-section "Recuperation de session orpheline" : pattern pour recuperer une session OpenCode toujours active cote serveur quand le MCP a deconnecte
+- §4 : reference au pattern activity-based timeout de hermes-agent (issue #4815)
+
+### v0.1.0 (MVP initial)
+
+- Skill orchestrator (8 sections), MCP opencode-mcp en caret pin ^1.10.1, decisions Q1-Q11 cf. design doc
 
 ## Quick start
 

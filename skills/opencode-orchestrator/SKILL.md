@@ -58,6 +58,10 @@ Detection :
 
 opencode-mcp expose 79 outils, mais pour 90 pour cent des taches tu utilises ces 3 outils workflow.
 
+### IMPORTANT - Contrainte de timeout MCP
+
+Le transport MCP entre Cowork et opencode-mcp a un timeout interne d'environ 180 secondes (3 minutes) qui surcharge le parametre maxDurationSeconds que tu passes. Cela signifie qu'un opencode_run de plus de 3 minutes risque de se deconnecter cote Cowork meme si OpenCode continue a tourner cote serveur (creation d'une session orpheline). Adapte tes seuils en consequence (voir sous-section "Recuperation de session orpheline" plus bas).
+
 ### opencode_ask - question one-shot
 
 Quand l'utiliser :
@@ -70,38 +74,62 @@ Exemple : "Quels modules importent X ?" donne opencode_ask.
 ### opencode_run - tache synchrone avec attente
 
 Quand l'utiliser :
-- Tache de modification reelle (refactor, ajout de feature, fix de bug)
-- Duree estimee 1-15 min
+- Tache de modification reelle (refactor court, fix de bug, ajout contenu)
+- Duree estimee MOINS DE 2-3 MIN (au-dela, bascule sur opencode_fire pour eviter le timeout MCP transport - cf. encart ci-dessus)
 - Tu peux te permettre d'attendre dans le tour de conversation
 
 Parametre maxDurationSeconds a ajuster :
-- 120 (2 min) pour fix simple
-- 300 (5 min) pour ajout de feature contenue
-- 600 (10 min) defaut pour refactor moyen
-- 900 (15 min) pour refactor etendu
+- 120 (2 min) pour fix simple - sweet spot
+- 180 (3 min) limite haute synchrone, au-dela basculer sur fire
+- Plus de 180 : NE PAS utiliser opencode_run, utiliser opencode_fire (cf. ci-dessous)
 
-Exemple : "Refactor le module auth pour utiliser JWT" donne opencode_run avec maxDurationSeconds 600.
+Exemple : "Fix le bug d'authentification dans login.ts" donne opencode_run avec maxDurationSeconds 180.
 
-### opencode_fire - fire-and-forget (background)
+### opencode_fire - fire-and-forget (background) - DEFAUT PREFERE pour 3+ min
 
 Quand l'utiliser :
-- Tache longue (plus de 15 min)
+- Tache estimee plus de 2-3 min (defaut prefere a partir de 3 min, PAS seulement pour 15+ min comme dans la v1.0)
 - Taches parallelisables (plusieurs modules a traiter en meme temps - cf. section 5)
 - L'utilisateur veut continuer la conversation pendant qu'OpenCode bosse
+- Tout cas ou tu veux eviter de bloquer sur le timeout MCP transport
 
-Suivi : opencode_check pour le statut compact, opencode_wait quand l'utilisateur veut attendre le resultat, opencode_sessions_overview pour la vue globale.
+Pattern recommande :
+1. opencode_fire dispatche la tache, retourne immediatement sessionId
+2. Tu reponds a l'utilisateur "OK, je lance en background, je te dis quand c'est pret au prochain tour"
+3. Au prochain tour de conversation (ou si l'utilisateur revient pour demander), tu fais opencode_check(sessionId) pour le statut
+4. Quand le status est "idle" / "finished", tu fais opencode_conversation ou opencode_review_changes pour recuperer le resultat
 
-Exemple : "Lance en parallele un refactor sur auth, payments, et notifications" donne 3 x opencode_fire, puis opencode_sessions_overview quand l'utilisateur demande le statut.
+Suivi : opencode_check (statut compact), opencode_wait (attente bloquante - subit le meme timeout MCP, a utiliser par tranches de 120-180s max), opencode_sessions_overview (vue globale).
 
-### Tableau recap
+Exemple : "Refactor le module factions pour utiliser EventBus" -> opencode_fire (estimation 5 min) -> check + reply au tour suivant.
+
+### Recuperation d'une session orpheline (timeout MCP)
+
+Si tu as lance opencode_run et que tu recois une erreur de timeout MCP (genre "Request timed out after Xs" ou "MCP server disconnected"), NE PRESUMES PAS que la tache a echoue cote OpenCode. Le serveur OpenCode continue souvent a tourner.
+
+Marche a suivre :
+
+1. Appeler opencode_sessions_overview pour lister les sessions actives
+2. Identifier celle qui correspond a ta tache (par titre ou par recence)
+3. Faire opencode_check sur cette session pour voir son etat :
+   - busy : continue a tourner, repasse en mode fire+check (annonce a l'utilisateur "OpenCode tourne encore, je verifierai au prochain tour")
+   - idle : la tache est finie, recupere le resultat via opencode_conversation ou opencode_review_changes
+   - error : la tache a vraiment echoue, presente l'erreur a l'utilisateur
+
+Le but : ne jamais relancer une tache qui tourne deja cote serveur (gaspillage de tokens) et ne jamais perdre un resultat parce que le transport MCP a coupe.
+
+Annonce a l'utilisateur (ReAct) : "Le tool MCP a un timeout interne d'environ 180s. La tache continue probablement cote OpenCode. Je verifie l'etat des sessions et je passe en mode fire-and-forget + check si besoin."
+
+### Tableau recap (v1.0.1)
 
 | Situation | Outil | Raison |
 |---|---|---|
 | Question moins de 30s | opencode_ask | Pas de session a maintenir |
-| Tache 1-15 min, synchrone | opencode_run | Wait inclus, plus simple |
-| Tache plus de 15 min OU parallele | opencode_fire + check | Pas bloquant |
+| Tache moins de 2-3 min, synchrone | opencode_run avec maxDur 120-180 | Wait inclus, sous le seuil timeout MCP (180s) |
+| Tache plus de 3 min OU parallele | opencode_fire + check au prochain tour | Evite le timeout MCP, defaut prefere |
+| Timeout MCP recu sur un opencode_run | sessions_overview + check (recuperer orpheline) | Ne pas relancer une tache qui tourne |
 | Suite d'une tache _run | opencode_reply | Continue la session existante |
-| Suite d'une tache _fire | opencode_reply apres _wait/_check | Idem |
+| Suite d'une tache _fire | opencode_check pour statut, opencode_reply quand l'utilisateur revient | Idem |
 
 ---
 
@@ -199,6 +227,10 @@ while session_busy:
 ### Limite assumee
 
 Si l'utilisateur passe a un autre sujet pendant qu'OpenCode tourne, ce skill ne re-poll pas tout seul en background. Le stall detection ne fonctionne que dans le tour de conversation actif (cf. design doc R5).
+
+### Inspiration : activity-based timeout (Hermes pattern)
+
+Cette heuristique est alignee sur l'approche activity-based timeout decrite dans hermes-agent (NousResearch) : au lieu de tuer une tache apres N secondes wall-clock, on track le timestamp du dernier signal d'activite (changement de filesChanged / todosCompleted / nouveau message) et on ne declenche le stall que si AUCUNE activite n'a eu lieu depuis le seuil. Ca distingue "tache complexe qui travaille" de "tache bloquee sur un appel mort". Cf. hermes-agent issue #4815 et PR #4864 pour le contexte canonique.
 
 ### Quand NE PAS appliquer
 
