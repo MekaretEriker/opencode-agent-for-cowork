@@ -2,9 +2,18 @@
 
 > Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
 
-**Statut** : v0.3.0 — MVP + patch timeout + safe-prompts + task-memory. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.3 -> v1.7.
+**Statut** : v0.4.0 — MVP + patch timeout + safe-prompts + task-memory + result-validator. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.4 -> v1.7.
 
 ## Changelog
+
+### v0.4.0 (skill result-validator)
+
+- Nouveau skill `opencode-result-validator` : implemente le 3e step du pattern Plan-Execute-Reflect
+- Active apres taches d'agent `build` (skip pour `ask`/`plan` et taches < 30s)
+- 4 checks : diff sain, tests (si detectables), build/compilation, coherence semantique
+- 3 formats de sortie : succes complet, reserves (un check rouge), echec critique
+- Composable avec MCPs utilisateur exposant `validate` (cf. design doc §6.2.2)
+- Inter-skill avec task-memory : antipattern note si validation rouge
 
 ### v0.3.0 (skill task-memory)
 
