@@ -1,5 +1,10 @@
 # opencode-agent
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Plugin version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Built on opencode-mcp](https://img.shields.io/badge/built%20on-opencode--mcp-orange.svg)](https://github.com/AlaeddineMessadi/opencode-mcp)
+[![For Cowork](https://img.shields.io/badge/for-Cowork-purple.svg)](https://anthropic.com)
+
 > Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
 
 **Statut** : v1.0.0 — Full scope complete. Roadmap v0.1.0 -> v1.0.0 livre integralement.
@@ -184,6 +189,12 @@ Error: Invalid directory: "/chemin/absolu/valide" is not an absolute path.
 ## License
 
 MIT
+
+## About OpenCode
+
+[OpenCode](https://github.com/anomalyco/opencode) is an open source AI coding agent (129k stars, 100+ providers, native LSP). It runs locally on your machine and exposes a headless API that this plugin orchestrates via [opencode-mcp](https://github.com/AlaeddineMessadi/opencode-mcp).
+
+OpenCode also publishes [official SDKs](https://opencode.ai/docs/sdk/) (JavaScript and Python) for programmatic integration outside the MCP ecosystem. This plugin specifically targets the MCP path because it lives inside Cowork.
 
 ## Crédits
 
