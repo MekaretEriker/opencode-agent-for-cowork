@@ -2,9 +2,17 @@
 
 > Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
 
-**Statut** : v0.2.0 — MVP + patch timeout + safe-prompts. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.2 -> v1.7.
+**Statut** : v0.3.0 — MVP + patch timeout + safe-prompts + task-memory. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.3 -> v1.7.
 
 ## Changelog
+
+### v0.3.0 (skill task-memory)
+
+- Nouveau skill `opencode-task-memory` : memoire operationnelle persistante par projet (`<workspace>/.opencode-agent-memory.json`)
+- Stats par type de tache (feature, fix, refactor, exploration), par provider, patterns/antipatterns appris
+- Propose `.gitignore` au 1er run pour eviter le commit accidentel
+- Distinction sémantique explicitée : memoire operationnelle (ce skill) vs utilisateur (consolidate-memory natif) vs contexte projet (AGENTS.md)
+- Composable avec MCPs utilisateur exposant `manage_adr` ou equivalent (cf. design doc §6.2.2)
 
 ### v0.2.0 (skill safe-prompts)
 
