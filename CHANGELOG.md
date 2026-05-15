@@ -16,42 +16,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added — Full scope complete
 
-- New skill `opencode-mcp-discovery` : detecte au 1er run par projet les MCPs user-side (RAG, validate, manage_adr) et propose substitution/chainage/skill-only
-- Decision de composition persistee dans `.opencode-agent-memory.json` (champ `mcpComposition`)
-- Re-discovery possible sur demande explicite
+- New skill `opencode-mcp-discovery`: detects user-side MCPs (RAG, validate, manage_adr) on first run per project and proposes substitution/chaining/skill-only
+- Composition decision persisted in `.opencode-agent-memory.json` (field `mcpComposition`)
+- Re-discovery possible on explicit request
 
 ### Milestone
 
-Cette version marque la **completion du Full scope** du design doc :
-- 8 skills Full
-- 3 scheduled-tasks bundlees (daily-repo-digest, weekly-deps-audit, monthly-refactor-scan)
-- 1 agent custom (cowork-with-github)
-- Composabilite avec MCPs utilisateur formalisee
-- 11 decisions Q1-Q11 satisfaites
+This version marks the **completion of the Full scope** of the design doc:
+- 8 Full skills
+- 3 bundled scheduled-tasks (daily-repo-digest, weekly-deps-audit, monthly-refactor-scan)
+- 1 custom agent (cowork-with-github)
+- User MCP composability formalized
+- 11 decisions Q1-Q11 satisfied
 
 ## [0.7.0] - 2026-05-15
 
 ### Added
 
-- 3 scheduled-tasks bundlees : `daily-repo-digest`, `weekly-deps-audit`, `monthly-refactor-scan`
-- Skill `opencode-scheduled-recipes` qui documente l'activation et la customisation
-- Integration avec le mecanisme natif Cowork `mcp__scheduled-tasks__*`
+- 3 bundled scheduled-tasks: `daily-repo-digest`, `weekly-deps-audit`, `monthly-refactor-scan`
+- Skill `opencode-scheduled-recipes` documenting activation and customization
+- Integration with native Cowork `mcp__scheduled-tasks__*` mechanism
 
 ## [0.6.0] - 2026-05-15
 
 ### Added
 
-- Skill `opencode-agent-roster` qui livre l'agent custom `cowork-with-github` (extension `build` + GitHub MCP)
+- Skill `opencode-agent-roster` delivering the custom agent `cowork-with-github` (`build` extension + GitHub MCP)
 - Template `agent-templates/cowork-with-github.json`
-- Ecriture AGENTS.md opt-in par projet avec section delimitee par balises HTML
-- Stockage opt-in dans `.opencode-agent-memory.json` (champ `agentsMdWriteEnabled`)
+- Opt-in AGENTS.md writing per project with HTML-tag-delimited section
+- Opt-in stored in `.opencode-agent-memory.json` (field `agentsMdWriteEnabled`)
 
 ## [0.5.0] - 2026-05-15
 
 ### Added
 
-- Skill `opencode-fallback-chain` : retry automatique avec provider suivant en cas de 429/5xx
-- Chaine par defaut `anthropic -> openrouter -> openai`
+- Skill `opencode-fallback-chain`: automatic retry with next provider on 429/5xx errors
+- Default chain `anthropic -> openrouter -> openai`
 - Override via env `OPENCODE_AGENT_PROVIDER_CHAIN`
 - 3 retries max, 5s backoff
 
@@ -59,50 +59,50 @@ Cette version marque la **completion du Full scope** du design doc :
 
 ### Added
 
-- Skill `opencode-result-validator` : pattern Plan-Execute-Reflect (3e step)
-- 4 checks systematiques : diff sain, tests, build, coherence semantique
-- 3 modes de sortie : succes complet, reserves, echec critique
+- Skill `opencode-result-validator`: Plan-Execute-Reflect pattern (3rd step)
+- 4 systematic checks: clean diff, tests, build, semantic coherence
+- 3 output modes: full success, caveats, critical failure
 
 ## [0.3.0] - 2026-05-15
 
 ### Added
 
-- Skill `opencode-task-memory` : memoire operationnelle JSON par projet (`<workspace>/.opencode-agent-memory.json`)
-- Stats par type de tache, par provider, patterns/antipatterns appris
-- Propose `.gitignore` au 1er run
+- Skill `opencode-task-memory`: JSON operational memory per project (`<workspace>/.opencode-agent-memory.json`)
+- Stats by task type, by provider, learned patterns/antipatterns
+- Proposes `.gitignore` entry on first run
 
 ## [0.2.0] - 2026-05-14
 
 ### Added
 
-- Skill `opencode-safe-prompts` : advisor patterns dangereux (5 categories : filesystem destructif, SQL destructif, RCE, git destructif, secrets/exfiltration)
-- Pattern advisor (pas firewall), coherent avec layered safety Q5
+- Skill `opencode-safe-prompts`: dangerous pattern advisor (5 categories: destructive filesystem, destructive SQL, RCE, destructive git, secrets/exfiltration)
+- Advisor pattern (not a firewall), consistent with layered safety Q5
 
 ## [0.1.1] - 2026-05-14
 
 ### Fixed
 
-- Patch handling timeout MCP transport ~180s
-- Section 2 du SKILL.md orchestrator : abaissement seuil `opencode_run` de "1-15 min" a "moins de 2-3 min"
-- Au-dela : `opencode_fire` + `opencode_check` au prochain tour
-- Nouvelle sous-section "Recuperation de session orpheline" : pattern de recuperation quand le MCP a deconnecte mais la session OpenCode continue cote serveur
-- Inspiration : hermes-agent activity-based timeout (issue #4815, PR #4864)
+- Patched MCP transport timeout handling (~180s)
+- Orchestrator SKILL.md section 2: lowered `opencode_run` threshold from "1-15 min" to "under 2-3 min"
+- Beyond that: `opencode_fire` + `opencode_check` on the next turn
+- New subsection "Orphaned session recovery": recovery pattern when MCP disconnects but the OpenCode session keeps running server-side
+- Inspiration: hermes-agent activity-based timeout (issue #4815, PR #4864)
 
 ## [0.1.0] - 2026-05-14
 
-### Added — MVP initial
+### Added — Initial MVP
 
 - Plugin scaffolding (manifest, .mcp.json, README)
-- Skill `opencode-orchestrator` complet avec 8 sections :
-  - Cadre general (philosophie orchestrator-workers)
-  - ReAct (explicitation avant dispatch)
-  - Choix outil (ask / run / fire)
-  - Choix agent (build / plan / @general)
-  - Heuristique stall pendant pilotage actif
-  - Politique de parallelisation (max 3 concurrentes)
-  - Install assistee OpenCode au 1er run
-  - Lecture AGENTS.md du repo cible
-  - Format resultat (mode standard vs mode dev, progressive disclosure)
-  - Notes techniques (workaround `directory` opencode-mcp)
-- Connecteur opencode-mcp avec caret pin `^1.10.1`
-- 11 decisions Q1-Q11 du design doc satisfaites pour le scope MVP
+- Complete skill `opencode-orchestrator` with 8 sections:
+  - General framework (orchestrator-workers philosophy)
+  - ReAct (explicit reasoning before dispatch)
+  - Tool selection (ask / run / fire)
+  - Agent selection (build / plan / @general)
+  - Stall heuristic during active monitoring
+  - Parallelization policy (max 3 concurrent)
+  - Assisted OpenCode install on first run
+  - Reading target repo's AGENTS.md
+  - Result format (standard mode vs dev mode, progressive disclosure)
+  - Technical notes (opencode-mcp `directory` workaround)
+- opencode-mcp connector with caret pin `^1.10.1`
+- 11 design doc decisions Q1-Q11 satisfied for MVP scope

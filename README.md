@@ -1,203 +1,322 @@
 # opencode-agent
 
+> Cowork plugin that turns Cowork into an intelligent orchestrator for [OpenCode](https://github.com/anomalyco/opencode). Delegate coding tasks, monitor sessions, validate results — all from natural-language conversations.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Plugin version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
-[![Built on opencode-mcp](https://img.shields.io/badge/built%20on-opencode--mcp-orange.svg)](https://github.com/AlaeddineMessadi/opencode-mcp)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](CHANGELOG.md)
+[![Status](https://img.shields.io/badge/status-feature--complete-success.svg)](#roadmap)
+[![Built on opencode-mcp](https://img.shields.io/badge/built%20on-opencode--mcp%20%5E1.10.1-orange.svg)](https://github.com/AlaeddineMessadi/opencode-mcp)
 [![For Cowork](https://img.shields.io/badge/for-Cowork-purple.svg)](https://anthropic.com)
+[![Plugin format](https://img.shields.io/badge/format-.plugin-lightgrey.svg)](#installation)
 
-> Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
+---
 
-**Statut** : v1.0.0 — Full scope complete. Roadmap v0.1.0 -> v1.0.0 livre integralement.
+```
+┌────────────────────────────────────────────────┐
+│  Cowork  (Claude desktop)                      │
+│  ┌──────────────────────────────────────────┐  │
+│  │  opencode-agent plugin                   │  │
+│  │  • 8 orchestration skills (catalog ↓)    │  │
+│  │  • 3 scheduled task recipes              │  │
+│  │  • 1 custom agent template               │  │
+│  │  • opencode-mcp connector (auto-managed) │  │
+│  └────────────────┬─────────────────────────┘  │
+└───────────────────┼────────────────────────────┘
+                    │  MCP (stdio)
+                    ▼
+       ┌─────────────────────┐   HTTP   ┌─────────────────────┐
+       │   opencode-mcp      │ ───────► │   opencode serve    │
+       │  (npx, auto-start)  │ ◄─────── │  (local OpenCode)   │
+       └─────────────────────┘          └─────────┬───────────┘
+                                                  │
+                                       ┌──────────┴──────────┐
+                                       │                     │
+                              ┌────────▼────────┐   ┌────────▼────────┐
+                              │  Native agents  │   │  User MCPs      │
+                              │  • build        │   │  • GitHub       │
+                              │  • plan         │   │  • Postgres     │
+                              │  • @general     │   │  • Notion       │
+                              └─────────────────┘   │  • RAG / vault  │
+                                                    │  • validators   │
+                                                    └─────────────────┘
+```
 
-## Changelog
+## Table of contents
 
-### v1.0.0 (mcp-discovery — release majeure feature-complete)
+- [Why this plugin](#why-this-plugin)
+- [Installation](#installation)
+- [Prerequisites](#prerequisites)
+- [Quick usage](#quick-usage)
+- [Skills catalog (8)](#skills-catalog-8)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Composability with user MCPs](#composability-with-user-mcps)
+- [Coexistence with OpenCode Desktop](#coexistence-with-opencode-desktop)
+- [Known limitations](#known-limitations)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Anthropic ToS compliance](#anthropic-tos-compliance)
+- [License](#license)
+- [Credits](#credits)
 
-- Nouveau skill `opencode-mcp-discovery` : detecte au 1er run par projet les MCPs user-side et propose substitution/chainage avec les skills Full
-- 3 modes proposes : substitution / chainage / plugin-only
-- Decision stockee dans `.opencode-agent-memory.json` champ `mcpComposition`
-- Re-discovery possible sur demande explicite
-- **Cette version marque la completion du Full scope** du design doc :
-  - 8 skills Full (orchestrator + safe-prompts + task-memory + result-validator + fallback-chain + agent-roster + scheduled-recipes + mcp-discovery)
-  - 3 scheduled-tasks bundlees
-  - 1 agent custom (cowork-with-github)
-  - Composabilite avec MCPs utilisateur formalisee
-  - 11 decisions Q1-Q11 satisfaites
+---
 
-### v0.7.0 (scheduled tasks)
+## Why this plugin
 
-- 3 scheduled-tasks bundlees : `daily-repo-digest`, `weekly-deps-audit`, `monthly-refactor-scan`
-- Skill documentaire `opencode-scheduled-recipes` qui explique l'activation et la customisation
-- Integration avec le mecanisme natif Cowork `mcp__scheduled-tasks__*`
-- Recettes non actives par defaut : opt-in explicite par l'utilisateur
+OpenCode is a powerful agentic coding tool. Using it from Cowork natively means writing prompts blind — you decide everything yourself: which agent to use, how long to wait, what to validate.
 
-### v0.6.0 (agent-roster + AGENTS.md write)
+This plugin teaches Cowork how to do that intelligently:
 
-- Nouveau skill `opencode-agent-roster` : utilise build/plan natifs OpenCode + livre l'agent custom `cowork-with-github` (extension build + GitHub MCP)
-- Template `agent-templates/cowork-with-github.json` pour install cote OpenCode au 1er run (opt-in)
-- Ecriture AGENTS.md opt-in par projet avec section delimitee par balises HTML
-- Stockage de l'opt-in dans `.opencode-agent-memory.json` (champ `agentsMdWriteEnabled`)
-- Aucune ecriture silencieuse dans le repo utilisateur
+- **Delegate** — picks the right OpenCode agent (`build` vs `plan` vs `@general`) and the right invocation tool (`ask` vs `run` vs `fire`) based on your prompt
+- **Monitor** — detects stalled sessions, recovers orphaned ones after MCP transport timeouts
+- **Validate** — before declaring "done", verifies diff coherence, tests, build, semantic alignment with intent
+- **Remember** — accumulates operational stats per project (durations, reliable providers, learned patterns)
+- **Stay safe** — warns on dangerous patterns before dispatch (`rm -rf /`, `DROP TABLE`, etc.)
+- **Recover** — automatically retries with the next provider on rate-limit/server errors
+- **Schedule** — runs daily digests, weekly audits, monthly refactor scans
+- **Compose** — defers to your existing MCPs (RAG, ADR, validators) when relevant rather than duplicating their work
 
-### v0.5.0 (skill fallback-chain)
+Result: Cowork becomes a **team lead** for OpenCode, while you stay in conversation.
 
-- Nouveau skill `opencode-fallback-chain` : retry automatique avec provider suivant en cas de 429/5xx
-- Chaine par defaut anthropic -> openrouter -> openai (override via env `OPENCODE_AGENT_PROVIDER_CHAIN`)
-- Max 3 tentatives, backoff 5s entre chaque
-- Inter-skill avec task-memory : `providerStats.failureCount` mis a jour
-- Composable avec MCPs utilisateur (gateway custom) cf. §6.2.2
+## Installation
 
-### v0.4.0 (skill result-validator)
+**3 steps, < 3 minutes** (assuming Cowork and OpenCode are already installed — see [Prerequisites](#prerequisites) if not).
 
-- Nouveau skill `opencode-result-validator` : implemente le 3e step du pattern Plan-Execute-Reflect
-- Active apres taches d'agent `build` (skip pour `ask`/`plan` et taches < 30s)
-- 4 checks : diff sain, tests (si detectables), build/compilation, coherence semantique
-- 3 formats de sortie : succes complet, reserves (un check rouge), echec critique
-- Composable avec MCPs utilisateur exposant `validate` (cf. design doc §6.2.2)
-- Inter-skill avec task-memory : antipattern note si validation rouge
+1. **Download** `opencode-agent.plugin` from the latest [release](../../releases/latest).
+2. **Drag-and-drop** the file into a Cowork conversation. A rich preview card appears.
+3. **Click "Accept"** when prompted. Restart any open conversation to activate the plugin.
 
-### v0.3.0 (skill task-memory)
+That's it. The next time you ask Cowork something like *"OpenCode, refactor my auth module"*, it will route through this plugin.
 
-- Nouveau skill `opencode-task-memory` : memoire operationnelle persistante par projet (`<workspace>/.opencode-agent-memory.json`)
-- Stats par type de tache (feature, fix, refactor, exploration), par provider, patterns/antipatterns appris
-- Propose `.gitignore` au 1er run pour eviter le commit accidentel
-- Distinction sémantique explicitée : memoire operationnelle (ce skill) vs utilisateur (consolidate-memory natif) vs contexte projet (AGENTS.md)
-- Composable avec MCPs utilisateur exposant `manage_adr` ou equivalent (cf. design doc §6.2.2)
+## Prerequisites
 
-### v0.2.0 (skill safe-prompts)
-
-- Nouveau skill `opencode-safe-prompts` : advisor qui scanne les prompts avant dispatch a OpenCode et warning l'utilisateur sur les patterns dangereux (5 categories : filesystem destructif, SQL destructif, RCE, git destructif, secrets/exfiltration)
-- Composable avec MCPs utilisateur exposant un tool `validate` (cf. design doc §6.2.2)
-- Pattern advisor (pas firewall) coherent avec decision Q5 layered safety
-- Inspirations : swarm-code-plugin + tools/approval.py de hermes-agent
-
-### v0.1.1 (patch timeout MCP)
-
-- §2 du SKILL.md : seuil opencode_run abaisse de "1-15 min" a "moins de 2-3 min" pour respecter le timeout MCP transport (~180s)
-- Au-dela de 3 min : fire+check par defaut (au lieu de attendre une exception)
-- Nouvelle sous-section "Recuperation de session orpheline" : pattern pour recuperer une session OpenCode toujours active cote serveur quand le MCP a deconnecte
-- §4 : reference au pattern activity-based timeout de hermes-agent (issue #4815)
-
-### v0.1.0 (MVP initial)
-
-- Skill orchestrator (8 sections), MCP opencode-mcp en caret pin ^1.10.1, decisions Q1-Q11 cf. design doc
-
-## Quick start
-
-### Pré-requis
-
-- Cowork installé (desktop app Anthropic)
-- OpenCode CLI (auto-installable au 1er run du plugin, voir ci-dessous)
-- Connexion internet pour npm (téléchargement de `opencode-mcp` à la volée)
-
-### Installation du plugin
-
-1. Récupère le fichier `opencode-agent.plugin`
-2. Drop-le dans le chat Cowork (sur le dossier `outputs/` ou via drag-and-drop)
-3. Cowork affiche un rich preview cliquable. Appuie sur **Accept** pour installer.
-
-C'est tout. Au prochain redémarrage de la conversation, le skill `opencode-orchestrator` et le serveur MCP `opencode-mcp` sont disponibles.
-
-### Premier lancement
-
-Demande quelque chose comme :
-
-> "Demande à OpenCode d'analyser le module auth de mon projet."
-
-Si OpenCode n'est pas encore installé sur ta machine, Cowork te le proposera et exécutera la commande après ta validation. Pas d'installation silencieuse.
-
-## Premier usage
-
-### Mode standard (par défaut)
-
-Tu parles en langage naturel, Cowork fait le reste :
-
-> **Toi** : "OpenCode, refactor le module factions pour utiliser un EventBus."
->
-> **Cowork** : "Je vais demander à OpenCode de refactor le module factions. C'est une tâche de modification (~5 min estimées), j'utilise l'agent `build` et je synchronise. Lancement..."
->
-> *[OpenCode travaille...]*
->
-> **Cowork** : "✓ J'ai refactor le module factions vers un pattern EventBus. Fichiers modifiés : `factions.gd` (séparation event/handler), `event_bus.gd` (nouveau), `combat.gd` (subscriptions). Les tests passent. Tu veux que je documente le pattern dans un README ?"
-
-### Mode dev (activé sur demande)
-
-Si tu veux voir le détail technique, demande-le explicitement :
-
-> **Toi** : "Mode dev, montre-moi la session."
->
-> **Cowork** : "Session : `ses_xxxxx` (agent: build, provider: anthropic, model: claude-sonnet-4-6). Durée : 4min12s (8 itérations). Outils OpenCode : opencode_find_text (3x), opencode_file_read (12x), opencode_message_send (2x). Diff : factions.gd +47/-23, event_bus.gd +89/-0, combat.gd +12/-4. Pour drill-down : `opencode_conversation({sessionId: \"ses_xxxxx\"})`."
-
-Tu peux activer le mode dev à n'importe quel moment avec : "montre les détails", "mode dev", "explique-toi techniquement", "donne le session ID", etc.
-
-### Tâches en parallèle
-
-Si tu veux lancer plusieurs analyses ou refactors en même temps :
-
-> **Toi** : "Lance en parallèle un refactor sur auth, un audit de sécurité sur payments, et une review de notifications."
->
-> **Cowork** : "Trois tâches indépendantes sur modules distincts — parallélisable. Je lance 3 sessions OpenCode en background. Tu peux continuer à me parler, et je te rends le statut quand tu demandes 'où en sont mes sessions OpenCode ?'."
-
-Par défaut le plugin limite à 3 sessions concurrentes (variable d'env `OPENCODE_AGENT_MAX_PARALLEL` pour override).
-
-## Positionnement vs OpenCode Desktop
-
-OpenCode a aussi son propre app desktop ([opencode.ai/download](https://opencode.ai/download)). Ce plugin **n'est pas un remplacement** — c'est un cas d'usage différent.
-
-| Tu veux... | Choisis... |
-|---|---|
-| Piloter OpenCode en TUI direct, avec raccourcis clavier rapides | **OpenCode Desktop** |
-| Déléguer des tâches OpenCode depuis Cowork (langage naturel, multi-sessions, dans une conversation plus large) | **Ce plugin** |
-| Cohabiter les deux | Aucun conflit — OpenCode `serve` tourne en local pour les deux |
-
-**Cohabitation** : si OpenCode Desktop tourne déjà, le plugin réutilise le même serveur OpenCode local. Pas de double-instance.
-
-## Limites du MVP (v1.0) et roadmap
-
-Le plugin est en MVP. Beaucoup de capacités sont à venir incrémentalement :
-
-| Capacité | Version cible | Statut |
+| Requirement | Version | How to check / install |
 |---|---|---|
-| Délégation avec ReAct, routing build/plan, stall detection | **v1.0** | ✅ MVP |
-| Multi-sessions parallèles (max 3 par défaut) | **v1.0** | ✅ MVP |
-| Install assistée OpenCode au 1er run | **v1.0** | ✅ MVP |
-| Lecture AGENTS.md du repo cible | **v1.0** | ✅ MVP |
-| `safe-prompts` (advisor sur patterns dangereux) | v1.1 | À venir |
-| `task-memory` (mémoire persistante par projet) | v1.2 | À venir |
-| `result-validator` (validation Reflect post-exécution) | v1.3 | À venir |
-| `fallback-chain` (retry provider sur 429/5xx) | v0.5.0 | ✅ Fait |
-| `agent-roster` (`cowork-with-github`) + écriture AGENTS.md | v0.6.0 | ✅ Fait |
-| Scheduled tasks (digests, audits, scans) | v1.6 | À venir |
-| Composabilité MCPs utilisateur (RAG, validators, ADR) | v1.7 | À venir |
+| **[Cowork](https://anthropic.com)** | Latest desktop app | You're reading this from Cowork? You have it ✓ |
+| **[OpenCode CLI](https://github.com/anomalyco/opencode)** | 1.14.x or later | `opencode --version`. Install: `curl -fsSL https://opencode.ai/install \| bash` (macOS/Linux/WSL) or `irm https://opencode.ai/install.ps1 \| iex` (Windows PowerShell) |
+| **Node.js** | 18+ (for `npx`) | `node --version`. Needed for `opencode-mcp` auto-fetch at first run |
+| **OS** | Windows / macOS / Linux / WSL2 | Primary tested platform: Windows + WSL2. Others: best-effort, no known blockers |
+| **Internet** | Required at first run | `npm` fetches `opencode-mcp` (~10 MB, cached after first run) |
 
-## Conformité ToS Anthropic
+The plugin proposes assisted install of OpenCode on first run if missing — no manual setup required for typical users.
 
-Ce plugin fait que Cowork (basé sur Claude) orchestre OpenCode (un autre AI). Cette direction — Claude délègue à OpenCode pour de la productivité développeur — est explicitement permise comme cas d'usage agentique légitime par la [Anthropic Acceptable Use Policy](https://www.anthropic.com/legal/aup) et les [Agentic Use Guidelines](https://support.anthropic.com/en/articles/12005017-using-agents-according-to-our-usage-policy).
+## Quick usage
 
-Précédent : [apoapps/swarm-code-plugin](https://github.com/apoapps/swarm-code-plugin) a fait l'audit ToS et est compliant pour un pattern analogue (Claude Code orchestre OpenCode).
+### Standard mode (default)
 
-## Bug connu — paramètre `directory` (opencode-mcp ≤ 1.10.x)
+Just talk to Cowork in natural language:
 
-Le paramètre `directory` des outils `opencode_run` / `opencode_ask` / `opencode_fire` peut rejeter des chemins absolus valides avec le message :
+> **You:** "OpenCode, refactor the auth module to use JWT."
+>
+> **Cowork:** "I'll ask OpenCode to refactor the auth module. This is a code modification task (~5 min estimated), so I'll use the `build` agent and dispatch it in the background. Starting now..."
+>
+> *[OpenCode works in background]*
+>
+> **Cowork:** "✓ Done. Modified 3 files (auth.ts, middleware.ts, types.ts). Tests pass (47/47). Want me to also update the documentation?"
+
+The orchestrator skill announces its plan (ReAct pattern), dispatches intelligently, and validates the result before reporting back.
+
+### Dev mode (on request)
+
+Activate technical details on demand:
+
+> **You:** "Show me the details."
+>
+> **Cowork:** "Session: `ses_xxxxx` (agent: build, provider: anthropic, model: claude-sonnet-4-6). Duration: 4m12s (8 iterations). Tools invoked: opencode_find_text (3x), opencode_file_read (12x). Diff: auth.ts +47/-23, middleware.ts +12/-4, types.ts +8/-0. For drill-down: `opencode_conversation({sessionId: \"ses_xxxxx\"})`."
+
+Triggers: `"show me details"`, `"dev mode"`, `"session id"`, `"explain technically"`.
+
+### Parallel sessions
+
+> **You:** "Run a refactor on auth, a security audit on payments, and a doc review on notifications — in parallel."
+>
+> **Cowork:** "Three independent tasks on distinct modules — parallelizable. Dispatching 3 OpenCode sessions in background. Ask me 'where are my OpenCode sessions?' anytime for status."
+
+Default cap: 3 concurrent sessions per repo (configurable via `OPENCODE_AGENT_MAX_PARALLEL`).
+
+## Skills catalog (8)
+
+The plugin ships 8 instructional skills. Each is a markdown file under `skills/<name>/SKILL.md`. They're loaded by Cowork automatically; you don't invoke them by name.
+
+| Skill | Triggered when | What it does |
+|---|---|---|
+| **[opencode-orchestrator](skills/opencode-orchestrator/SKILL.md)** | You ask Cowork to delegate code work to OpenCode | Core piloting: ReAct, agent routing (`build`/`plan`/`@general`), tool choice (`ask`/`run`/`fire`), stall detection, parallel sessions, install assistance, AGENTS.md reading, MCP timeout workaround |
+| **[opencode-safe-prompts](skills/opencode-safe-prompts/SKILL.md)** | Before dispatching prompts that include shell, SQL, git destructive ops, or remote execution | Advisor that warns on 5 categories of dangerous patterns (filesystem destructive, SQL destructive, RCE, git destructive, secrets) before dispatch |
+| **[opencode-task-memory](skills/opencode-task-memory/SKILL.md)** | At task start (read) and task end (write) on the same project | Maintains per-project operational memory in `<workspace>/.opencode-agent-memory.json` (stats by task type, by provider, learned patterns, antipatterns) |
+| **[opencode-result-validator](skills/opencode-result-validator/SKILL.md)** | After OpenCode reports completion of a `build` agent task | 4 systematic checks before declaring success: diff coherence, tests, build/compile, semantic alignment with intent (Plan-Execute-Reflect 3rd step) |
+| **[opencode-fallback-chain](skills/opencode-fallback-chain/SKILL.md)** | When OpenCode returns 429/5xx from a provider | Retries with the next provider in the configured chain (anthropic → openrouter → openai by default), up to 3 attempts with 5s backoff |
+| **[opencode-agent-roster](skills/opencode-agent-roster/SKILL.md)** | When choosing an OpenCode agent, especially for GitHub-related tasks | Extends native build/plan with custom `cowork-with-github` agent (build + GitHub MCP). Also handles opt-in AGENTS.md writing with delimited section |
+| **[opencode-scheduled-recipes](skills/opencode-scheduled-recipes/SKILL.md)** | When the user asks about recurring tasks or scheduled automation | Documents 3 bundled recipes (`daily-repo-digest`, `weekly-deps-audit`, `monthly-refactor-scan`) and how to activate them via Cowork's native scheduler |
+| **[opencode-mcp-discovery](skills/opencode-mcp-discovery/SKILL.md)** | At first run on a new project | Detects user-side MCPs (RAG, validate, ADR, vault, etc.) and proposes substitution/chaining/skill-only composability options with the plugin's Full skills |
+
+## Configuration
+
+All optional. The plugin works with sensible defaults out of the box.
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `OPENCODE_AGENT_MAX_PARALLEL` | `3` | Max concurrent OpenCode sessions per project. Set to `1` for strict sequential, higher for powerful machines with tolerant providers |
+| `OPENCODE_AGENT_PROVIDER_CHAIN` | `anthropic,openrouter,openai` | Comma-separated provider fallback chain. Used by `opencode-fallback-chain` skill on 429/5xx errors |
+| `OPENCODE_DEFAULT_PROVIDER` | *(none)* | Default LLM provider for OpenCode dispatches when not specified per-tool. Example: `anthropic` |
+| `OPENCODE_DEFAULT_MODEL` | *(none)* | Default model ID. Example: `claude-sonnet-4-5` |
+| `OPENCODE_BASE_URL` | `http://127.0.0.1:4096` | OpenCode server URL (inherited from `opencode-mcp`) |
+
+### Per-project memory
+
+The `task-memory` skill creates a file at `<workspace>/.opencode-agent-memory.json` on first run. It's proposed for addition to your `.gitignore`. Schema:
+
+```json
+{
+  "version": "1.0",
+  "project": "/absolute/path/to/repo",
+  "tasksTotal": 47,
+  "byType": {
+    "feature_implementation": {
+      "count": 28,
+      "avgDurationSec": 240,
+      "successRate": 0.89,
+      "preferredAgent": "build"
+    }
+  },
+  "providerStats": { "anthropic": { "calls": 35, "successRate": 0.94 } },
+  "patterns": ["..."],
+  "antipatterns": ["..."],
+  "mcpComposition": { /* set by mcp-discovery skill */ }
+}
+```
+
+## Architecture
+
+The plugin sits **Cowork-side** as orchestration intelligence. It does not modify OpenCode itself.
 
 ```
-Error: Invalid directory: "/chemin/absolu/valide" is not an absolute path.
+Cowork (you, Claude) — orchestrator
+  │
+  └─ orchestrator skill decides:
+       ├─ tool: ask / run / fire
+       ├─ agent: build / plan / @general / cowork-with-github
+       ├─ duration: estimate from task-memory
+       └─ provider: best from providerStats or env default
+            │
+            ▼
+    opencode-mcp (npx bridge)
+            │
+            ▼
+    opencode serve (local HTTP server)
+            │
+            ├─ executes via native agents (build/plan/@general)
+            ├─ uses user MCPs (GitHub, Postgres, ...) if configured
+            └─ reads AGENTS.md from target repo for project context
+            │
+            ▼
+    Result returns to Cowork
+            │
+            └─ result-validator skill checks: diff, tests, build, semantics
+                 ├─ ✓ all green → "Task complete"
+                 ├─ ⚠ caveats → "Done with reserves"
+                 └─ ✗ critical → "Critical issue, here are options"
 ```
 
-**Workaround actif** dans le skill orchestrator : préfixer le prompt par `cd /chemin && ` au lieu de passer `directory`. Transparent pour l'utilisateur. À retirer du skill quand corrigé upstream.
+This is the **orchestrator-workers pattern** described in [Anthropic's "Building Effective Agents"](https://www.anthropic.com/research/building-effective-agents): Cowork directs and synthesizes, OpenCode executes the heavy work.
+
+## Composability with user MCPs
+
+If you already have domain-specific MCPs (a RAG/vault, a validator, an ADR manager), this plugin **defers to them** rather than duplicating their work.
+
+At first run per project, the `mcp-discovery` skill detects MCPs exposing tools like `search_vault`, `validate`, `manage_adr`, and proposes:
+
+- **(a) Substitution** — disable the plugin's overlapping skill, use yours
+- **(b) Chaining** — plugin checks first (generic), your MCP next (domain-specific)
+- **(c) Plugin-only** — keep my skills, ignore your MCPs for this concern
+
+The decision is persisted in `task-memory`. Re-discovery on demand: `"redo MCP discovery"`.
+
+| Your MCP exposes... | Plugin skill it can replace/augment |
+|---|---|
+| `search_vault`, `search_code_graph` | (none — augments orchestrator context) |
+| `validate` | `result-validator` |
+| `manage_adr`, `list_decisions` | `task-memory` (architectural decisions side) |
+| Generic RAG (`search`, `query`) | (none — augments orchestrator context) |
+
+See the `mcp-discovery` skill for the full matching logic.
+
+## Coexistence with OpenCode Desktop
+
+OpenCode publishes its own [desktop app (beta)](https://opencode.ai/download). **This plugin is not a replacement.**
+
+| You want to... | Use... |
+|---|---|
+| Pilot OpenCode in a fast TUI with keyboard shortcuts | **OpenCode Desktop** |
+| Delegate OpenCode tasks from Cowork conversations (natural language, multi-session, with memory) | **This plugin** |
+| Both | No conflict — `opencode serve` runs locally for both |
+
+If OpenCode Desktop is already running, this plugin reuses the same local server. No duplicate instance.
+
+## Known limitations
+
+| # | Limitation | Mitigation in plugin |
+|---|---|---|
+| L1 | `opencode-mcp` validation can reject valid absolute paths in the `directory` parameter (false positive on `/mnt/d/...` paths) | Workaround documented in `orchestrator` skill: prefix prompts with `cd /path && ` instead of passing `directory` |
+| L2 | MCP transport has a ~180s timeout that overrides `maxDurationSeconds` | Orchestrator defaults to `fire+check` for tasks > 3 min; recovers orphaned sessions via `sessions_overview` |
+| L3 | Skills are markdown instructions, not event-driven hooks. Stall detection works only while Cowork is actively piloting the task | Documented in each skill's "Limits" section |
+| L4 | WSL ↔ Windows mount can have cache lag for newly written files | Plugin packaging uses dual-naming (`opencode-agent.plugin` + `opencode-agent-v<version>.plugin`) to bypass cache |
+| L5 | `task-memory` is per-project, not cross-project | By design (per Q1 decision in DESIGN doc). Cross-project memory deferred to v2 if needed |
+
+## Roadmap
+
+Full scope from the design document is **complete in v1.0**. All 11 decisions (Q1-Q11) shipped.
+
+| Version | Milestone | Status |
+|---|---|---|
+| v0.1.0 | MVP — orchestrator skill, opencode-mcp connector | ✓ shipped |
+| v0.1.1 | Patch: MCP timeout 180s handling | ✓ shipped |
+| v0.2.0 | safe-prompts | ✓ shipped |
+| v0.3.0 | task-memory | ✓ shipped |
+| v0.4.0 | result-validator (Plan-Execute-Reflect) | ✓ shipped |
+| v0.5.0 | fallback-chain | ✓ shipped |
+| v0.6.0 | agent-roster + AGENTS.md write | ✓ shipped |
+| v0.7.0 | scheduled-tasks | ✓ shipped |
+| **v1.0.0** | **mcp-discovery (Full scope complete)** | ✓ shipped |
+| v1.0.1 | i18n: skill bodies translated to English | ✓ shipped |
+| v2.x | TBD — informed by community feedback | open |
+
+Full per-version notes: [CHANGELOG.md](CHANGELOG.md).
+
+## Contributing
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
+- How to propose a new skill (frontmatter spec, body style, testing)
+- Commit conventions
+- Semver policy
+- Code of conduct
+
+Tracker: [issues](../../issues) · Discussions: [discussions](../../discussions).
+
+## Anthropic ToS compliance
+
+This plugin makes Cowork (Claude) orchestrate OpenCode (another AI agent). This direction — Claude delegating to another AI for developer productivity — is explicitly permitted under Anthropic's [Acceptable Use Policy](https://www.anthropic.com/legal/aup) and [Agentic Use Guidelines](https://support.anthropic.com/en/articles/12005017-using-agents-according-to-our-usage-policy).
+
+Precedent: [swarm-code-plugin](https://github.com/apoapps/swarm-code-plugin) (Claude Code → OpenCode variant) ran the same legal audit and is compliant.
 
 ## License
 
-MIT
+[MIT](LICENSE) — Copyright (c) 2026 Mekaret.
 
-## About OpenCode
+## Credits
 
-[OpenCode](https://github.com/anomalyco/opencode) is an open source AI coding agent (129k stars, 100+ providers, native LSP). It runs locally on your machine and exposes a headless API that this plugin orchestrates via [opencode-mcp](https://github.com/AlaeddineMessadi/opencode-mcp).
+| Project | Role |
+|---|---|
+| [anomalyco/opencode](https://github.com/anomalyco/opencode) | The open source coding agent we orchestrate (129k★, 100+ providers, native LSP) |
+| [AlaeddineMessadi/opencode-mcp](https://github.com/AlaeddineMessadi/opencode-mcp) | The MCP bridge this plugin builds on |
+| [apoapps/swarm-code-plugin](https://github.com/apoapps/swarm-code-plugin) | Architectural inspiration (Claude Code → OpenCode variant of the orchestrator-workers pattern) |
+| [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) | Patterns adopted: activity-based timeout, provider fallback, ADR-style memory |
+| [Anthropic Cowork](https://anthropic.com) | The host platform |
 
-OpenCode also publishes [official SDKs](https://opencode.ai/docs/sdk/) (JavaScript and Python) for programmatic integration outside the MCP ecosystem. This plugin specifically targets the MCP path because it lives inside Cowork.
+About OpenCode programmatic integration: in addition to the MCP path this plugin uses, OpenCode publishes [official SDKs](https://opencode.ai/docs/sdk/) for JavaScript and Python — useful if you want to build a non-MCP integration (CLI, dashboard, scheduled workers outside Cowork).
 
-## Crédits
+---
 
-- [opencode-mcp](https://github.com/AlaeddineMessadi/opencode-mcp) par AlaeddineMessadi (le bridge MCP vers OpenCode)
-- [opencode](https://github.com/anomalyco/opencode) par anomalyco (l'agent de code open source)
-- Pattern d'architecture inspiré de [swarm-code-plugin](https://github.com/apoapps/swarm-code-plugin) (variant Claude Code)
+**Made by [Mekaret](https://github.com/<your-username>)** · *Cowork directs, OpenCode executes.*
