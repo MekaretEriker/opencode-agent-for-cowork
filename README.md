@@ -2,9 +2,22 @@
 
 > Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
 
-**Statut** : v0.7.0 — Full scope complete sauf MCP discovery (v1.7 a venir).
+**Statut** : v1.0.0 — Full scope complete. Roadmap v0.1.0 -> v1.0.0 livre integralement.
 
 ## Changelog
+
+### v1.0.0 (mcp-discovery — release majeure feature-complete)
+
+- Nouveau skill `opencode-mcp-discovery` : detecte au 1er run par projet les MCPs user-side et propose substitution/chainage avec les skills Full
+- 3 modes proposes : substitution / chainage / plugin-only
+- Decision stockee dans `.opencode-agent-memory.json` champ `mcpComposition`
+- Re-discovery possible sur demande explicite
+- **Cette version marque la completion du Full scope** du design doc :
+  - 8 skills Full (orchestrator + safe-prompts + task-memory + result-validator + fallback-chain + agent-roster + scheduled-recipes + mcp-discovery)
+  - 3 scheduled-tasks bundlees
+  - 1 agent custom (cowork-with-github)
+  - Composabilite avec MCPs utilisateur formalisee
+  - 11 decisions Q1-Q11 satisfaites
 
 ### v0.7.0 (scheduled tasks)
 
