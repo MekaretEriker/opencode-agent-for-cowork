@@ -2,9 +2,16 @@
 
 > Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
 
-**Statut** : v0.1.1 — MVP + patch timeout. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.1 -> v1.7.
+**Statut** : v0.2.0 — MVP + patch timeout + safe-prompts. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.2 -> v1.7.
 
 ## Changelog
+
+### v0.2.0 (skill safe-prompts)
+
+- Nouveau skill `opencode-safe-prompts` : advisor qui scanne les prompts avant dispatch a OpenCode et warning l'utilisateur sur les patterns dangereux (5 categories : filesystem destructif, SQL destructif, RCE, git destructif, secrets/exfiltration)
+- Composable avec MCPs utilisateur exposant un tool `validate` (cf. design doc §6.2.2)
+- Pattern advisor (pas firewall) coherent avec decision Q5 layered safety
+- Inspirations : swarm-code-plugin + tools/approval.py de hermes-agent
 
 ### v0.1.1 (patch timeout MCP)
 
