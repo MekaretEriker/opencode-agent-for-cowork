@@ -5,49 +5,49 @@ description: "Use this skill at the start of each new project to detect user-sid
 
 # opencode-mcp-discovery
 
-## Nature et portee
-Skill meta-coordinateur qui s'active **au 1er run du plugin sur un projet**. Il detecte les MCPs disponibles cote Cowork et cote OpenCode, identifie ceux qui couvrent (totalement ou partiellement) des besoins des skills Full du plugin, et propose des modes de composition a l'utilisateur. Le but : ne JAMAIS doublonner ce que l'utilisateur a deja construit.
+## Nature and scope
+Meta-coordinator skill that activates **on the first plugin run for a project**. It detects MCPs available on the Cowork side and the OpenCode side, identifies those that fully or partially cover the needs of the plugin's Full skills, and proposes composition modes to the user. The goal: NEVER duplicate what the user has already built.
 
-C'est l'incarnation du principe directeur §13.5 du design doc : "le plugin enrichit, ne remplace pas".
+This is the embodiment of the guiding principle §13.5 of the design doc: "the plugin enriches, it does not replace".
 
-## Detection des MCPs
-Au 1er run par projet :
-1. Liste les MCPs cote Cowork (via introspection des tools `mcp__*` disponibles dans la session)
-2. Liste les MCPs cote OpenCode via `opencode_mcp_status`
-3. Pour chaque MCP detecte, regarde ses tools exposes (recherche heuristique sur les noms : `search`, `query`, `validate`, `manage_adr`, `analyze`, `trace`, etc.)
-4. Mappe ces tools aux skills Full du plugin qu'ils pourraient couvrir
+## MCP detection
+On the first run per project:
+1. List MCPs on the Cowork side (via introspection of `mcp__*` tools available in the session)
+2. List MCPs on the OpenCode side via `opencode_mcp_status`
+3. For each detected MCP, look at its exposed tools (heuristic search on names: `search`, `query`, `validate`, `manage_adr`, `analyze`, `trace`, etc.)
+4. Map these tools to the plugin's Full skills they could potentially cover
 
-## Mapping MCP -> skill plugin
+## MCP -> plugin skill mapping
 
-| Tool MCP detecte | Couvre potentiellement | Action proposee |
+| Detected MCP tool | Potentially covers | Proposed action |
 |---|---|---|
-| `search_vault`, `search_code_graph`, `ask` | Contexte projet enrichi (au-dela de AGENTS.md) | Enrichir orchestrator avec ce MCP avant dispatch |
-| `validate`, `check_consistency` | result-validator (v0.4.0) | Substitution ou chainage avec result-validator |
-| `manage_adr`, `list_decisions` | task-memory (v0.3.0) — partie architecturale | Chainer : task-memory pour stats, MCP pour decisions |
-| `analyze_entity_impact`, `trace_call_path` | Heuristique d'agent + contexte | Enrichir l'analyse pre-dispatch |
-| RAG generique (Chroma, LlamaIndex) | Contexte projet | Lecture avant dispatch pour prompt enrichi |
+| `search_vault`, `search_code_graph`, `ask` | Enriched project context (beyond AGENTS.md) | Enrich orchestrator with this MCP before dispatch |
+| `validate`, `check_consistency` | result-validator (v0.4.0) | Substitution or chaining with result-validator |
+| `manage_adr`, `list_decisions` | task-memory (v0.3.0) — architectural part | Chain: task-memory for raw stats, MCP for decisions |
+| `analyze_entity_impact`, `trace_call_path` | Agent heuristic + context | Enrich pre-dispatch analysis |
+| Generic RAG (Chroma, LlamaIndex) | Project context | Read before dispatch for enriched prompt |
 
-## Marche a suivre au 1er run par projet
-1. Verifier dans `<workspace>/.opencode-agent-memory.json` si la decouverte a deja ete faite (champ `mcpDiscoveryDone: true`)
-2. Si non : lancer la decouverte. Sinon : skip.
-3. Si MCPs pertinents detectes, presenter a l'utilisateur :
+## Procedure on first run per project
+1. Check in `<workspace>/.opencode-agent-memory.json` whether discovery has already been done (field `mcpDiscoveryDone: true`)
+2. If not: run discovery. Otherwise: skip.
+3. If relevant MCPs detected, present to the user:
 
 ```
-J'ai detecte que tu utilises [liste MCPs detectes].
+I detected that you're using [list of detected MCPs].
 
-Certains couvrent deja ce que mes skills Full font :
-- [MCP X.validate] -> remplace ou complete mon result-validator
-- [MCP Y.manage_adr] -> complete mon task-memory pour les decisions architecturales
+Some of them already cover what my Full skills do:
+- [MCP X.validate] -> replaces or complements my result-validator
+- [MCP Y.manage_adr] -> complements my task-memory for architectural decisions
 
-Tu preferes :
-(a) substitution : je desactive mes skills pour ces fonctions, j'utilise les tiens
-(b) chainage : mes skills d'abord (checks generiques), tes MCPs ensuite (checks domaine)
-(c) plugin seul : je garde mes skills, je n'utilise pas tes MCPs
+Do you prefer:
+(a) substitution: I disable my skills for these functions, I use yours
+(b) chaining: my skills first (generic checks), your MCPs next (domain checks)
+(c) plugin only: I keep my skills, I don't use your MCPs
 
-Choix par defaut si tu ne reponds pas dans 30s : (b) chainage.
+Default choice if you don't respond within 30s: (b) chaining.
 ```
 
-4. Stocker la decision dans `.opencode-agent-memory.json` :
+4. Store the decision in `.opencode-agent-memory.json`:
 ```json
 {
   "mcpDiscoveryDone": true,
@@ -59,47 +59,47 @@ Choix par defaut si tu ne reponds pas dans 30s : (b) chainage.
 }
 ```
 
-5. Aux taches suivantes, l'orchestrator et les skills Full lisent cette config et ajustent leur comportement.
+5. On subsequent tasks, the orchestrator and Full skills read this config and adjust their behavior.
 
-## Heuristiques de detection
+## Detection heuristics
 
-### Vault Relkhon-style
-Si tu detectes des tools comme `search_vault`, `search_code_graph`, `manage_adr`, `validate`, `analyze_entity_impact` sous un meme MCP -> c'est un vault domaine-specifique. Propose chainage avec orchestrator, task-memory, result-validator.
+### Relkhon-style vault
+If you detect tools like `search_vault`, `search_code_graph`, `manage_adr`, `validate`, `analyze_entity_impact` under the same MCP -> it's a domain-specific vault. Propose chaining with orchestrator, task-memory, result-validator.
 
-### RAG simple (Chroma, LlamaIndex)
-Si tu detectes uniquement `search` ou `query` + similarity sans graphe ou ADR -> c'est un RAG simple. Propose enrichissement du prompt avant dispatch (lecture before pour ajouter contexte).
+### Simple RAG (Chroma, LlamaIndex)
+If you detect only `search` or `query` + similarity without graph or ADR -> it's a simple RAG. Propose prompt enrichment before dispatch (read before to add context).
 
-### Validator custom
-Si tu detectes un tool `validate` isole sans le reste -> propose substitution du result-validator si l'utilisateur est confiant qu'il couvre mieux les checks de son domaine.
+### Custom validator
+If you detect an isolated `validate` tool without the rest -> propose substitution of result-validator if the user is confident it better covers their domain checks.
 
-## Reverification
-La decouverte n'est pas immuable. L'utilisateur peut demander :
-- "Refais la decouverte MCP" -> reset `mcpDiscoveryDone: false` dans la memoire et relance
-- "Change ma composition pour [skill] en [mode]" -> mise a jour ciblee
+## Re-discovery
+Discovery is not immutable. The user can request:
+- "Refais la decouverte MCP" / "Redo MCP discovery" -> reset `mcpDiscoveryDone: false` in memory and re-run
+- "Change ma composition pour [skill] en [mode]" / "Change my composition for [skill] to [mode]" -> targeted update
 
 ## Inter-skill
-- **orchestrator** : appelle ce skill une fois par projet (au 1er run detecte via task-memory)
-- **task-memory** : stocke la config mcpComposition
-- **result-validator** : consulte la config avant de faire ses checks (peut deleguer au MCP user)
-- **task-memory** elle-meme : peut etre court-circuitee si manage_adr couvre deja
+- **orchestrator**: calls this skill once per project (on first run detected via task-memory)
+- **task-memory**: stores the mcpComposition config
+- **result-validator**: consults the config before running its checks (can delegate to user MCP)
+- **task-memory** itself: can be short-circuited if manage_adr already covers it
 
-## Limites
-- La detection se base sur les noms des tools (heuristique). Faux negatifs possibles si MCP custom avec naming non-standard.
-- L'utilisateur peut surcharger n'importe quelle decision via commande explicite.
-- La decouverte ajoute ~5-10s au 1er run d'un projet, c'est acceptable.
-- Pas de reverification automatique si l'utilisateur ajoute un nouveau MCP en cours de route — il doit re-lancer la decouverte explicitement.
+## Limitations
+- Detection is based on tool names (heuristic). False negatives possible with custom MCPs using non-standard naming.
+- The user can override any decision via explicit command.
+- Discovery adds ~5-10s to the first run of a project; this is acceptable.
+- No automatic re-discovery if the user adds a new MCP mid-project — they must explicitly re-run discovery.
 
 ## Inspirations
-- Pattern "configurable composability" : design doc §13.5
-- "Dispatch double" (cote Cowork vs cote OpenCode) : §6.2.2
-- Decouverte MCP au runtime : equivalent fonctionnel des `check_fn` Hermes (mais cote skill, pas cote tool registration)
-- swarm-code-plugin n'a pas cet equivalent — c'est notre contribution unique
+- "Configurable composability" pattern: design doc §13.5
+- "Double dispatch" (Cowork side vs OpenCode side): §6.2.2
+- Runtime MCP discovery: functional equivalent of Hermes `check_fn` (but skill-side, not tool registration side)
+- swarm-code-plugin has no equivalent — this is our unique contribution
 
-## Note sur la v1.0.0
-Cette version marque la **completion du Full scope** du design doc. Toutes les capacites prevues sont implementees :
-- 7 skills Full : orchestrator, safe-prompts, task-memory, result-validator, fallback-chain, agent-roster, scheduled-recipes, mcp-discovery (8 en fait avec le meta-coordinateur)
-- 3 scheduled-tasks bundlees
-- 1 agent custom (cowork-with-github)
-- Composabilite avec MCPs utilisateur formalisee
+## Note on v1.0.0
+This version marks the **completion of the Full scope** of the design doc. All planned capabilities are implemented:
+- 8 Full skills: orchestrator, safe-prompts, task-memory, result-validator, fallback-chain, agent-roster, scheduled-recipes, mcp-discovery
+- 3 bundled scheduled-tasks
+- 1 custom agent (cowork-with-github)
+- User MCP composability formalized
 
-Toutes les decisions Q1-Q11 du design doc sont satisfaites. Le plugin est feature-complete pour son MVP-Full roadmap.
+All Q1-Q11 decisions from the design doc are satisfied. The plugin is feature-complete for its MVP-Full roadmap.

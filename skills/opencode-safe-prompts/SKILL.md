@@ -5,126 +5,126 @@ description: "Use this skill before dispatching any prompt to OpenCode that invo
 
 # opencode-safe-prompts
 
-## Nature et portée
+## Nature and scope
 
-Ce skill est un **advisor** cote Cowork. Avant de dispatcher un prompt a OpenCode via `opencode_run` / `opencode_ask` / `opencode_fire`, tu scans le prompt (et toute reformulation que tu as faite) pour des patterns a risque. Si tu en detectes, tu **annonces clairement a l'utilisateur** et tu demandes confirmation explicite.
+This skill is an **advisor** on the Cowork side. Before dispatching a prompt to OpenCode via `opencode_run` / `opencode_ask` / `opencode_fire`, you scan the prompt (and any reformulation you made) for risky patterns. If you detect any, you **clearly announce it to the user** and ask for explicit confirmation.
 
-**Ce n'est PAS un firewall.** Tu ne bloques pas automatiquement. Tu informes et tu laisses l'utilisateur decider. La responsabilite finale reste a l'utilisateur. Coherent avec la decision Q5 du design doc (layered safety : opencode-mcp `permission: allow` + agent `plan` + safe-prompts advisor).
+**This is NOT a firewall.** You do not block automatically. You inform and let the user decide. Final responsibility remains with the user. Consistent with design doc decision Q5 (layered safety: opencode-mcp `permission: allow` + agent `plan` + safe-prompts advisor).
 
-## Composabilite avec MCPs utilisateur
+## Composability with user MCPs
 
-Si un MCP utilisateur expose un tool `validate` ou equivalent (typiquement un vault Relkhon-style avec validation semantique cross-specs), c'est lui qui doit faire l'audit fin. Ce skill ne couvre que les patterns generiques (shell destructif, SQL destructif, exec a distance). Voir DESIGN doc section 6.2.2 pour le pattern de composition.
+If a user MCP exposes a `validate` tool or equivalent (typically a Relkhon-style vault with semantic cross-spec validation), that MCP should handle the fine-grained audit. This skill only covers generic patterns (destructive shell, destructive SQL, remote execution). See DESIGN doc section 6.2.2 for the composition pattern.
 
-Au 1er run sur un projet, si tu detectes un MCP user-side avec un tool `validate`, propose a l'utilisateur :
-- (a) desactiver safe-prompts au profit du MCP user (plus fin pour son domaine)
-- (b) chainer les deux (safe-prompts d'abord pour les patterns generiques, MCP user ensuite pour les checks domaine)
-- (c) garder seulement safe-prompts
+On the first run on a project, if you detect a user-side MCP with a `validate` tool, offer the user:
+- (a) disable safe-prompts in favor of the user MCP (more precise for their domain)
+- (b) chain both (safe-prompts first for generic patterns, user MCP next for domain checks)
+- (c) keep only safe-prompts
 
-## Quand ce skill se declenche
+## When this skill triggers
 
-Avant d'envoyer un prompt a OpenCode qui contient potentiellement :
-- Une commande shell explicite ou attendue
-- Une operation de fichier en ecriture
-- Une operation sur une base de donnees
-- Une operation git destructive
-- Une execution de script distant
+Before sending a prompt to OpenCode that potentially contains:
+- An explicit or expected shell command
+- A file write operation
+- A database operation
+- A destructive git operation
+- A remote script execution
 
-Si le prompt est purement de lecture/analyse (`opencode_ask` avec agent `plan`, ou phrases comme "explique", "trouve", "analyse") -> tu peux skip ce skill.
+If the prompt is purely read/analysis (`opencode_ask` with `plan` agent, or phrases like "explain", "find", "analyse") -> you can skip this skill.
 
-## Table de patterns a scanner
+## Pattern scan table
 
-### Filesystem destructif
+### Destructive filesystem
 
-| Pattern (regex insensible casse) | Categorie | Action |
+| Pattern (case-insensitive regex) | Category | Action |
 |---|---|---|
-| `rm\s+-rf?\s+/(?!\w)` | suppression recursive racine | Warning critique + confirmation explicite |
-| `rm\s+-rf?\s+~` | suppression home | Warning critique + confirmation explicite |
-| `rm\s+-rf?\s+\$HOME` | suppression home variable | Warning critique + confirmation explicite |
-| `>\s*/dev/sd[a-z]` | ecriture disque brute | Warning critique + bloquer par defaut |
-| `mkfs\.\w+` | reformatage | Warning critique + confirmation explicite |
-| `dd\s+.*of=/dev/` | ecriture disque dd | Warning critique + confirmation explicite |
+| `rm\s+-rf?\s+/(?!\w)` | recursive root deletion | Critical warning + explicit confirmation |
+| `rm\s+-rf?\s+~` | home deletion | Critical warning + explicit confirmation |
+| `rm\s+-rf?\s+\$HOME` | home variable deletion | Critical warning + explicit confirmation |
+| `>\s*/dev/sd[a-z]` | raw disk write | Critical warning + block by default |
+| `mkfs\.\w+` | reformatting | Critical warning + explicit confirmation |
+| `dd\s+.*of=/dev/` | dd disk write | Critical warning + explicit confirmation |
 
-### SQL destructif
+### Destructive SQL
 
-| Pattern | Categorie | Action |
+| Pattern | Category | Action |
 |---|---|---|
-| `DROP\s+(TABLE\|DATABASE\|SCHEMA)` | destruction schema | Warning + confirmation |
-| `TRUNCATE\s+TABLE` | vidage table | Warning + confirmation |
-| `DELETE\s+FROM\s+\w+\s*;?\s*$` (sans WHERE) | delete sans where | Warning critique + confirmation |
+| `DROP\s+(TABLE\|DATABASE\|SCHEMA)` | schema destruction | Warning + confirmation |
+| `TRUNCATE\s+TABLE` | table wipe | Warning + confirmation |
+| `DELETE\s+FROM\s+\w+\s*;?\s*$` (without WHERE) | delete without where | Critical warning + confirmation |
 
-### Execution distante
+### Remote execution
 
-| Pattern | Categorie | Action |
+| Pattern | Category | Action |
 |---|---|---|
 | `curl\s+.*\|\s*(bash\|sh\|zsh)` | RCE pattern | Warning + confirmation |
 | `wget\s+.*\|\s*(bash\|sh\|zsh)` | RCE pattern | Warning + confirmation |
-| `(curl\|wget)\s+.*\|\s*python` | exec python distant | Warning + confirmation |
+| `(curl\|wget)\s+.*\|\s*python` | remote python exec | Warning + confirmation |
 
-### Git destructif
+### Destructive git
 
-| Pattern | Categorie | Action |
+| Pattern | Category | Action |
 |---|---|---|
 | `git\s+push\s+.*--force(\s\|$)` | force push | Warning + confirmation |
-| `git\s+push\s+.*--force-with-lease` | force-with-lease (moins risque) | Note seule, pas de blocage |
-| `git\s+reset\s+--hard` | reset hard | Warning |
-| `git\s+clean\s+-fd` | clean force | Warning |
-| `git\s+branch\s+-D` | suppression force branche | Warning |
-| `git\s+rebase\s+.*(master\|main)` | rebase main | Warning + suggestion utiliser PR |
+| `git\s+push\s+.*--force-with-lease` | force-with-lease (lower risk) | Note only, no blocking |
+| `git\s+reset\s+--hard` | hard reset | Warning |
+| `git\s+clean\s+-fd` | force clean | Warning |
+| `git\s+branch\s+-D` | force branch deletion | Warning |
+| `git\s+rebase\s+.*(master\|main)` | rebase main | Warning + suggestion to use PR |
 
-### Secrets et exfiltration
+### Secrets and exfiltration
 
-| Pattern | Categorie | Action |
+| Pattern | Category | Action |
 |---|---|---|
-| `cat\s+.*\.env` (dans contexte de copie/exposition) | lecture secrets | Warning |
-| `cat\s+~/.ssh/id_` | lecture cle SSH | Warning critique |
-| `(echo\|printf)\s+.*\|\s*(curl\|nc\s)` | exfiltration potentielle | Warning |
+| `cat\s+.*\.env` (in copy/exposure context) | secrets read | Warning |
+| `cat\s+~/.ssh/id_` | SSH key read | Critical warning |
+| `(echo\|printf)\s+.*\|\s*(curl\|nc\s)` | potential exfiltration | Warning |
 
-## Marche a suivre quand un pattern matche
+## Procedure when a pattern matches
 
-1. **Ne pas dispatcher immediatement** a OpenCode
-2. Annoncer a l'utilisateur (mode standard) :
+1. **Do not dispatch immediately** to OpenCode
+2. Announce to the user (standard mode):
 
    ```
-   Attention : ton prompt contient un pattern a risque ([categorie]).
-   Detecte : "[extrait du pattern matche]"
+   Warning: your prompt contains a risky pattern ([category]).
+   Detected: "[matched pattern excerpt]"
 
-   Ce que ca pourrait faire : [explication non technique de l'impact potentiel].
+   What this could do: [non-technical explanation of the potential impact].
 
-   Tu veux quand meme que je dispatche a OpenCode ? Tape 'oui' pour confirmer, 'non' pour annuler, ou reformule le prompt.
+   Do you still want me to dispatch to OpenCode? Type 'yes' to confirm, 'no' to cancel, or rephrase the prompt.
    ```
 
-3. Attendre la confirmation explicite ('oui' ou equivalent clair)
-4. Si confirme -> dispatcher
-5. Si non ou reformulation -> suivre la nouvelle direction
+3. Wait for explicit confirmation ('yes' or clear equivalent)
+4. If confirmed -> dispatch
+5. If no or rephrasing -> follow the new direction
 
-## Cas particuliers
+## Edge cases
 
-### Pattern dans une spec, pas dans une commande
-Si l'utilisateur dit "implemente la migration `DELETE FROM users WHERE last_login < '2020'`", le `DELETE` est *dans la spec*, pas une commande directe a executer immediatement. Tu peux skip le warning si :
-- Le pattern est explicitement formule comme intention/specification
-- L'utilisateur a fait un check prealable de sa requete (mentionne tests, dry-run, etc.)
-- Le contexte indique que c'est documentation ou planification
+### Pattern in a spec, not a command
+If the user says "implement the migration `DELETE FROM users WHERE last_login < '2020'`", the `DELETE` is *in the spec*, not a direct command to execute immediately. You can skip the warning if:
+- The pattern is explicitly framed as intent/specification
+- The user has already run a pre-check on their query (mentions tests, dry-run, etc.)
+- Context indicates it's documentation or planning
 
-En cas de doute, mieux vaut un faux positif qu'un drame -> warn quand meme.
+When in doubt, a false positive is better than a disaster -> warn anyway.
 
-### Taches repetees dans la meme conversation
-Si l'utilisateur a deja confirme un pattern dans la conversation actuelle, tu n'as pas besoin de redemander a chaque fois pour le meme pattern strict. Mais re-warning systematique pour les patterns critiques (`rm -rf /`, `DELETE FROM` sans WHERE, ecriture `/dev/sd*`) a chaque occurrence.
+### Repeated tasks in the same conversation
+If the user has already confirmed a pattern in the current conversation, you don't need to re-ask every time for the exact same pattern. But always re-warn for critical patterns (`rm -rf /`, `DELETE FROM` without WHERE, `/dev/sd*` writes) at each occurrence.
 
-### Mode dev override
-Si l'utilisateur active explicitement le mode dev et dit "skip safety", tu peux desactiver les warnings non-critiques pour la session courante. Tu confirmes UNE FOIS au debut :
+### Dev mode override
+If the user explicitly activates dev mode and says "skip safety", you can disable non-critical warnings for the current session. You confirm ONCE at the start:
 
-> "OK, je desactive safe-prompts non-critiques pour cette conversation. Les patterns critiques (rm -rf /, dd vers /dev/, DELETE sans WHERE) resteront warned. A toi de garder le controle."
+> "OK, I'm disabling non-critical safe-prompts for this conversation. Critical patterns (rm -rf /, dd to /dev/, DELETE without WHERE) will still be warned. You're in control."
 
-## Inspirations canoniques
+## Canonical inspirations
 
-Patterns inspires de :
-- `apoapps/swarm-code-plugin` : audit ToS conforme, advisor pattern non bloquant
-- `tools/approval.py` de hermes-agent (NousResearch) : table de patterns dangereux avec regex
-- Mais reformules pour etre **advisors** cote Cowork, pas hooks bloquants cote serveur (cf. design doc Q11 - pas de hooks plugin en MVP, skill-as-instruction)
+Patterns inspired by:
+- `apoapps/swarm-code-plugin`: ToS-compliant audit, non-blocking advisor pattern
+- `tools/approval.py` from hermes-agent (NousResearch): dangerous pattern table with regex
+- But reformulated to be **advisors** on the Cowork side, not blocking hooks on the server side (see design doc Q11 - no plugin hooks in MVP, skill-as-instruction)
 
-## Limites assumees
+## Known limitations
 
-- Les regex ne couvrent pas tout. Un utilisateur determine peut contourner avec des obfuscations (`r''m -rf /` ou variables d'env).
-- Pas de garantie de securite - c'est un filet de securite, pas une muraille.
-- L'utilisateur reste responsable. Ce skill reduit les accidents, ne les empeche pas.
-- Les warnings consomment des tokens et du temps. Si l'utilisateur fait beaucoup de patterns frontiere (analyse SQL legitime par exemple), le mode dev override est la solution.
+- Regexes don't cover everything. A determined user can bypass with obfuscations (`r''m -rf /` or env variables).
+- No security guarantee — this is a safety net, not a wall.
+- The user remains responsible. This skill reduces accidents, it doesn't prevent them.
+- Warnings consume tokens and time. If the user frequently hits borderline patterns (legitimate SQL analysis for example), dev mode override is the solution.

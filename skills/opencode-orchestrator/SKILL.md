@@ -5,202 +5,202 @@ description: "Use this skill when delegating coding tasks to OpenCode from Cowor
 
 # opencode-orchestrator
 
-## Cadre general
+## General framework
 
-Ce skill apprend a Cowork (toi, Claude) a piloter OpenCode comme un worker de code intelligent. Tu n'ecris pas le code toi-meme ici - tu decides QUAND deleguer, QUOI deleguer, COMMENT formuler la demande, et tu interpretes le resultat pour l'utilisateur.
+This skill teaches Cowork (you, Claude) to drive OpenCode as an intelligent code worker. You don't write the code yourself here — you decide WHEN to delegate, WHAT to delegate, HOW to formulate the request, and you interpret the result for the user.
 
-Quand ce skill se declenche :
-- L'utilisateur veut faire ecrire/modifier/analyser du code dans un repo
-- Phrases types : "demande a OpenCode", "lance OpenCode sur", "refactor le module X", "implemente la feature Y", "explique-moi comment marche Z"
-- Toute tache de code substantielle (plus de quelques lignes) qui beneficie d'un agent dedie
+When this skill triggers:
+- The user wants to write/modify/analyze code in a repo
+- Typical phrases: "demande a OpenCode" / "ask OpenCode", "lance OpenCode sur" / "run OpenCode on", "refactor module X", "implement feature Y", "explain how Z works"
+- Any substantial code task (more than a few lines) that benefits from a dedicated agent
 
-Quand NE PAS l'utiliser :
-- Question conceptuelle sans code a produire (Claude repond directement)
-- Modification minimale d'un fichier que tu peux faire toi-meme avec Edit (moins de 5 lignes)
-- L'utilisateur a explicitement demande "fais-le toi-meme, n'utilise pas OpenCode"
+When NOT to use it:
+- Conceptual question without code to produce (Claude answers directly)
+- Minimal file modification you can do yourself with Edit (fewer than 5 lines)
+- The user explicitly requested "do it yourself, don't use OpenCode"
 
-Philosophie : tu es l'orchestrateur, OpenCode est l'executant. Tu portes la conversation avec l'utilisateur, OpenCode porte la charge analytique et l'ecriture de code. Toi tu valides, synthetises, presentes.
-
----
-
-## 1. ReAct - explicitation avant dispatch
-
-Le pattern ReAct (Reasoning + Acting) demande que tu expliques ton raisonnement avant de passer a l'action. Pour ce skill : avant de dispatcher une tache a OpenCode, tu annonces brievement a l'utilisateur :
-
-1. Type de tache detecte : refactor / debug / explore / feature / multi-modules / etc.
-2. Agent OpenCode choisi et raison (build / plan / cowork-with-github)
-3. Mode d'execution : synchrone (_run) / background (_fire) / parallele (multiple _fire)
-4. Estimation de duree si pertinent (basee sur l'experience / par defaut)
-
-Pourquoi : reference canonique "Building Effective Agents" (Anthropic, fin 2024) - l'explicitation rend ton comportement previsible. L'utilisateur peut t'arreter avant que tu partes dans la mauvaise direction.
-
-Ne jamais dispatcher silencieusement. Toujours afficher un mini-bloc de plan.
-
-Template en mode standard :
-
-Je vais demander a OpenCode de [resume court de la tache]. C'est un [type de tache], donc j'utilise l'agent [build/plan] et je [synchronise/lance en background]. Estimation : [X min].
-
-[Dispatch]
-
-Template en mode dev :
-
-Detection :
-- Type de tache : refactor multi-fichiers
-- Mots-cles : "refactor", "module auth", "utiliser JWT"
-- Agent choisi : build (modifie le code) - provider anthropic par defaut
-- Outil : opencode_run (duree 1-15 min)
-- maxDurationSeconds : 600 (refactor moyen)
-- Pas de parallelisation (un seul module cible)
-
-[Dispatch]
-
-## 2. Choix de l'outil OpenCode (ask / run / fire)
-
-opencode-mcp expose 79 outils, mais pour 90 pour cent des taches tu utilises ces 3 outils workflow.
-
-### IMPORTANT - Contrainte de timeout MCP
-
-Le transport MCP entre Cowork et opencode-mcp a un timeout interne d'environ 180 secondes (3 minutes) qui surcharge le parametre maxDurationSeconds que tu passes. Cela signifie qu'un opencode_run de plus de 3 minutes risque de se deconnecter cote Cowork meme si OpenCode continue a tourner cote serveur (creation d'une session orpheline). Adapte tes seuils en consequence (voir sous-section "Recuperation de session orpheline" plus bas).
-
-### opencode_ask - question one-shot
-
-Quand l'utiliser :
-- Question courte (moins de 30 secondes estimees)
-- Pas d'ecriture de fichier attendue
-- Pas de continuite de session necessaire
-
-Exemple : "Quels modules importent X ?" donne opencode_ask.
-
-### opencode_run - tache synchrone avec attente
-
-Quand l'utiliser :
-- Tache de modification reelle (refactor court, fix de bug, ajout contenu)
-- Duree estimee MOINS DE 2-3 MIN (au-dela, bascule sur opencode_fire pour eviter le timeout MCP transport - cf. encart ci-dessus)
-- Tu peux te permettre d'attendre dans le tour de conversation
-
-Parametre maxDurationSeconds a ajuster :
-- 120 (2 min) pour fix simple - sweet spot
-- 180 (3 min) limite haute synchrone, au-dela basculer sur fire
-- Plus de 180 : NE PAS utiliser opencode_run, utiliser opencode_fire (cf. ci-dessous)
-
-Exemple : "Fix le bug d'authentification dans login.ts" donne opencode_run avec maxDurationSeconds 180.
-
-### opencode_fire - fire-and-forget (background) - DEFAUT PREFERE pour 3+ min
-
-Quand l'utiliser :
-- Tache estimee plus de 2-3 min (defaut prefere a partir de 3 min, PAS seulement pour 15+ min comme dans la v1.0)
-- Taches parallelisables (plusieurs modules a traiter en meme temps - cf. section 5)
-- L'utilisateur veut continuer la conversation pendant qu'OpenCode bosse
-- Tout cas ou tu veux eviter de bloquer sur le timeout MCP transport
-
-Pattern recommande :
-1. opencode_fire dispatche la tache, retourne immediatement sessionId
-2. Tu reponds a l'utilisateur "OK, je lance en background, je te dis quand c'est pret au prochain tour"
-3. Au prochain tour de conversation (ou si l'utilisateur revient pour demander), tu fais opencode_check(sessionId) pour le statut
-4. Quand le status est "idle" / "finished", tu fais opencode_conversation ou opencode_review_changes pour recuperer le resultat
-
-Suivi : opencode_check (statut compact), opencode_wait (attente bloquante - subit le meme timeout MCP, a utiliser par tranches de 120-180s max), opencode_sessions_overview (vue globale).
-
-Exemple : "Refactor le module factions pour utiliser EventBus" -> opencode_fire (estimation 5 min) -> check + reply au tour suivant.
-
-### Recuperation d'une session orpheline (timeout MCP)
-
-Si tu as lance opencode_run et que tu recois une erreur de timeout MCP (genre "Request timed out after Xs" ou "MCP server disconnected"), NE PRESUMES PAS que la tache a echoue cote OpenCode. Le serveur OpenCode continue souvent a tourner.
-
-Marche a suivre :
-
-1. Appeler opencode_sessions_overview pour lister les sessions actives
-2. Identifier celle qui correspond a ta tache (par titre ou par recence)
-3. Faire opencode_check sur cette session pour voir son etat :
-   - busy : continue a tourner, repasse en mode fire+check (annonce a l'utilisateur "OpenCode tourne encore, je verifierai au prochain tour")
-   - idle : la tache est finie, recupere le resultat via opencode_conversation ou opencode_review_changes
-   - error : la tache a vraiment echoue, presente l'erreur a l'utilisateur
-
-Le but : ne jamais relancer une tache qui tourne deja cote serveur (gaspillage de tokens) et ne jamais perdre un resultat parce que le transport MCP a coupe.
-
-Annonce a l'utilisateur (ReAct) : "Le tool MCP a un timeout interne d'environ 180s. La tache continue probablement cote OpenCode. Je verifie l'etat des sessions et je passe en mode fire-and-forget + check si besoin."
-
-### Tableau recap (v1.0.1)
-
-| Situation | Outil | Raison |
-|---|---|---|
-| Question moins de 30s | opencode_ask | Pas de session a maintenir |
-| Tache moins de 2-3 min, synchrone | opencode_run avec maxDur 120-180 | Wait inclus, sous le seuil timeout MCP (180s) |
-| Tache plus de 3 min OU parallele | opencode_fire + check au prochain tour | Evite le timeout MCP, defaut prefere |
-| Timeout MCP recu sur un opencode_run | sessions_overview + check (recuperer orpheline) | Ne pas relancer une tache qui tourne |
-| Suite d'une tache _run | opencode_reply | Continue la session existante |
-| Suite d'une tache _fire | opencode_check pour statut, opencode_reply quand l'utilisateur revient | Idem |
+Philosophy: you are the orchestrator, OpenCode is the executor. You carry the conversation with the user, OpenCode carries the analytical load and code writing. You validate, synthesize, present.
 
 ---
 
-## 3. Choix de l'agent OpenCode (build / plan / @general)
+## 1. ReAct - explicit reasoning before dispatch
 
-OpenCode (cf. anomalyco/opencode) inclut nativement deux agents principaux + un sous-agent.
+The ReAct pattern (Reasoning + Acting) requires you to explain your reasoning before acting. For this skill: before dispatching a task to OpenCode, briefly announce to the user:
 
-### Agents natifs
+1. Detected task type: refactor / debug / explore / feature / multi-module / etc.
+2. Chosen OpenCode agent and reason (build / plan / cowork-with-github)
+3. Execution mode: synchronous (_run) / background (_fire) / parallel (multiple _fire)
+4. Duration estimate if relevant (based on experience / defaults)
 
-build - agent full-access (defaut)
-- Lecture/ecriture/bash sans confirmation
-- Pour toute tache de modification reelle de code
-- C'est le bon defaut pour la grande majorite des taches
+Why: canonical reference "Building Effective Agents" (Anthropic, late 2024) — making your behavior explicit makes it predictable. The user can stop you before you go in the wrong direction.
 
-plan - agent read-only / exploration
-- Ne modifie pas les fichiers par defaut
-- Demande confirmation avant d'executer du bash
-- Pour : "explique-moi", "review", "trouve", "analyse", "ou est defini X"
-- Plus sur pour les domaines non familiers
+Never dispatch silently. Always show a mini plan block.
 
-### Sous-agent
+Standard mode template:
 
-@general - pour recherches complexes multi-etapes
-- Invoque via mention dans le prompt (pas via le param agent:)
-- Pour : "trouve tous les usages de X dans les 5 services", "trace ce call path"
-- Utile combine avec build ou plan
+I'm going to ask OpenCode to [short task summary]. This is a [task type], so I'm using the [build/plan] agent and [syncing/launching in background]. Estimate: [X min].
 
-### Agents custom (livres par le plugin)
+[Dispatch]
 
-En MVP : aucun. A partir de v1.5, le plugin livrera cowork-with-github (extension de build avec MCP GitHub). Pour le moment, si une tache necessite GitHub, fallback sur build et informer l'utilisateur que la PR sera manuelle.
+Dev mode template:
 
-### Heuristique de routing
+Detection:
+- Task type: multi-file refactor
+- Keywords: "refactor", "auth module", "use JWT"
+- Chosen agent: build (modifies code) - anthropic provider by default
+- Tool: opencode_run (duration 1-15 min)
+- maxDurationSeconds: 600 (medium refactor)
+- No parallelization (single target module)
 
-| Type de prompt | Agent | Mots-cles indicatifs |
+[Dispatch]
+
+## 2. Choosing the OpenCode tool (ask / run / fire)
+
+opencode-mcp exposes 79 tools, but for 90% of tasks you use these 3 workflow tools.
+
+### IMPORTANT - MCP timeout constraint
+
+The MCP transport between Cowork and opencode-mcp has an internal timeout of approximately 180 seconds (3 minutes) that overrides the maxDurationSeconds parameter you pass. This means an opencode_run lasting more than 3 minutes risks disconnecting on the Cowork side even if OpenCode continues running on the server side (creating an orphaned session). Adjust your thresholds accordingly (see "Orphaned session recovery" subsection below).
+
+### opencode_ask - one-shot question
+
+When to use:
+- Short question (estimated under 30 seconds)
+- No file writing expected
+- No session continuity needed
+
+Example: "Which modules import X?" → opencode_ask.
+
+### opencode_run - synchronous task with wait
+
+When to use:
+- Real modification task (short refactor, bug fix, content addition)
+- Estimated duration LESS THAN 2-3 MIN (beyond that, switch to opencode_fire to avoid MCP transport timeout — see above)
+- You can afford to wait within the conversation turn
+
+maxDurationSeconds parameter to adjust:
+- 120 (2 min) for simple fix — sweet spot
+- 180 (3 min) synchronous upper limit, beyond that switch to fire
+- More than 180: DO NOT use opencode_run, use opencode_fire (see below)
+
+Example: "Fix the authentication bug in login.ts" → opencode_run with maxDurationSeconds 180.
+
+### opencode_fire - fire-and-forget (background) - PREFERRED DEFAULT for 3+ min
+
+When to use:
+- Task estimated over 2-3 min (preferred default from 3 min, NOT only for 15+ min as in v1.0)
+- Parallelizable tasks (multiple modules to process simultaneously — see section 5)
+- The user wants to continue the conversation while OpenCode works
+- Any case where you want to avoid blocking on the MCP transport timeout
+
+Recommended pattern:
+1. opencode_fire dispatches the task, returns sessionId immediately
+2. You respond to the user "OK, launching in background, I'll update you next turn"
+3. On the next conversation turn (or when the user comes back to ask), you call opencode_check(sessionId) for status
+4. When status is "idle" / "finished", you call opencode_conversation or opencode_review_changes to retrieve the result
+
+Monitoring: opencode_check (compact status), opencode_wait (blocking wait — subject to the same MCP timeout, use in 120-180s chunks max), opencode_sessions_overview (global view).
+
+Example: "Refactor the factions module to use EventBus" → opencode_fire (estimate 5 min) → check + reply next turn.
+
+### Orphaned session recovery (MCP timeout)
+
+If you launched opencode_run and receive an MCP timeout error (e.g., "Request timed out after Xs" or "MCP server disconnected"), DO NOT ASSUME the task failed on OpenCode's side. The OpenCode server often keeps running.
+
+Procedure:
+
+1. Call opencode_sessions_overview to list active sessions
+2. Identify the one corresponding to your task (by title or recency)
+3. Run opencode_check on that session to see its state:
+   - busy: still running, switch to fire+check mode (announce to user "OpenCode is still running, I'll check next turn")
+   - idle: task is done, retrieve result via opencode_conversation or opencode_review_changes
+   - error: task truly failed, present the error to the user
+
+Goal: never re-launch a task that is already running on the server side (token waste) and never lose a result because the MCP transport was cut.
+
+Announce to user (ReAct): "The MCP tool has an internal timeout of ~180s. The task is probably still running on OpenCode's side. I'm checking session state and switching to fire-and-forget + check mode if needed."
+
+### Recap table (v1.0.1)
+
+| Situation | Tool | Reason |
 |---|---|---|
-| Exploration / review / question | plan | "explique", "review", "comment marche", "trouve", "where is", "analyse" |
-| Modification / refactor / fix | build | "implemente", "ajoute", "fix", "refactor", "modifie", "ecris" |
-| Recherche multi-fichiers complexe | (build ou plan) + @general dans le prompt | "trouve tous les", "trace", "cross-service" |
-| GitHub / PR / issues | build (MVP) ou cowork-with-github (v1.5+) | "PR", "pull request", "issue", "GitHub" |
+| Question under 30s | opencode_ask | No session to maintain |
+| Task under 2-3 min, synchronous | opencode_run with maxDur 120-180 | Wait included, below MCP timeout threshold (180s) |
+| Task over 3 min OR parallel | opencode_fire + check next turn | Avoids MCP timeout, preferred default |
+| MCP timeout received on opencode_run | sessions_overview + check (recover orphan) | Don't re-launch a running task |
+| Follow-up on a _run task | opencode_reply | Continues the existing session |
+| Follow-up on a _fire task | opencode_check for status, opencode_reply when user returns | Same |
 
-### Exemples concrets
+---
 
-| Prompt utilisateur | Agent + outil |
+## 3. Choosing the OpenCode agent (build / plan / @general)
+
+OpenCode (see anomalyco/opencode) natively includes two main agents + one sub-agent.
+
+### Native agents
+
+build - full-access agent (default)
+- Read/write/bash without confirmation
+- For any real code modification task
+- This is the right default for the vast majority of tasks
+
+plan - read-only / exploration agent
+- Does not modify files by default
+- Asks confirmation before running bash
+- For: "explain", "review", "find", "analyse", "where is X defined"
+- Safer for unfamiliar domains
+
+### Sub-agent
+
+@general - for complex multi-step searches
+- Invoked via mention in the prompt (not via the agent: param)
+- For: "find all usages of X across the 5 services", "trace this call path"
+- Useful combined with build or plan
+
+### Custom agents (delivered by the plugin)
+
+In MVP: none. Starting from v1.5, the plugin will deliver cowork-with-github (build extension with GitHub MCP). For now, if a task requires GitHub, fall back to build and inform the user that the PR will be manual.
+
+### Routing heuristic
+
+| Prompt type | Agent | Indicative keywords |
+|---|---|---|
+| Exploration / review / question | plan | "explain", "review", "how does", "find", "where is", "analyse", "explique", "trouve" |
+| Modification / refactor / fix | build | "implement", "add", "fix", "refactor", "modify", "write", "implemente", "ajoute" |
+| Complex multi-file search | (build or plan) + @general in the prompt | "find all", "trace", "cross-service", "trouve tous les" |
+| GitHub / PR / issues | build (MVP) or cowork-with-github (v1.5+) | "PR", "pull request", "issue", "GitHub" |
+
+### Concrete examples
+
+| User prompt | Agent + tool |
 |---|---|
-| "Explique-moi le flow d'authentification" | plan + opencode_ask |
-| "Implemente la pagination sur GET /users" | build + opencode_run (maxDur 300) |
-| "Trouve tous les endroits ou on appelle decryptToken et liste-les" | plan + opencode_ask avec @general dans le prompt |
-| "Refactor le module factions et cree une PR" | build (MVP) + opencode_run (maxDur 600), avec note "PR manuelle car cowork-with-github pas encore livre" |
+| "Explique-moi le flow d'authentification" / "Explain the authentication flow" | plan + opencode_ask |
+| "Implemente la pagination sur GET /users" / "Implement pagination on GET /users" | build + opencode_run (maxDur 300) |
+| "Trouve tous les endroits ou on appelle decryptToken et liste-les" / "Find all places where decryptToken is called and list them" | plan + opencode_ask with @general in the prompt |
+| "Refactor le module factions et cree une PR" / "Refactor the factions module and create a PR" | build (MVP) + opencode_run (maxDur 600), with note "manual PR since cowork-with-github not yet delivered" |
 
-### Fallback si l'agent demande n'existe pas
+### Fallback if requested agent doesn't exist
 
-Avant tout dispatch, tu peux verifier la liste des agents disponibles via opencode_agent_list. Si l'agent vise (ex: cowork-with-github) n'est pas dispo localement, tu repli sur build et informes l'utilisateur.
+Before any dispatch, you can verify the list of available agents via opencode_agent_list. If the target agent (e.g., cowork-with-github) is not available locally, fall back to build and inform the user.
 
-## 4. Heuristique stall pendant pilotage actif
+## 4. Stall heuristic during active monitoring
 
-Le pattern stall detection distingue un orchestrateur intelligent d'un poll naif. Quand tu pilotes une session OpenCode via opencode_run ou opencode_wait, tu monitores la progression entre les polls. Si OpenCode tourne en rond sans progres, tu sors proprement au lieu d'attendre le timeout.
+The stall detection pattern distinguishes an intelligent orchestrator from a naive poller. When you're driving an OpenCode session via opencode_run or opencode_wait, you monitor progress between polls. If OpenCode is spinning without progress, you exit cleanly instead of waiting for the timeout.
 
-### Indicateurs de progres (issus de opencode_check)
+### Progress indicators (from opencode_check)
 
-- filesChanged : nombre de fichiers modifies depuis le debut de la session
-- todosCompleted : nombre de todos termines
-- tokenUsage : peut indiquer activite meme sans output (moins fiable)
+- filesChanged: number of files modified since session start
+- todosCompleted: number of completed todos
+- tokenUsage: can indicate activity even without output (less reliable)
 
-### Heuristique
+### Heuristic
 
-1. Entre 2 appels consecutifs a opencode_check, compare ces compteurs au tour precedent
-2. Si AUCUN compteur n'a augmente sur 2 polls consecutifs (typiquement separes de 30-60s), stall detecte
-3. Action :
-   - opencode_session_summarize avec id, providerID, modelID pour capturer un resume du travail fait
-   - opencode_session_abort avec id pour sortir proprement
-   - Presenter a l'utilisateur le resume + l'option "tu veux que je redemarre avec un prompt plus precis ?"
+1. Between 2 consecutive calls to opencode_check, compare these counters to the previous turn
+2. If NO counter has increased over 2 consecutive polls (typically 30-60s apart), stall detected
+3. Action:
+   - opencode_session_summarize with id, providerID, modelID to capture a summary of work done
+   - opencode_session_abort with id to exit cleanly
+   - Present the summary to the user + the option "want me to restart with a more precise prompt?"
 
 ### Pseudo-code
 
@@ -220,246 +220,246 @@ while session_busy:
     if stall_count >= 2:
       summary = opencode_session_summarize(sessionId, ...)
       opencode_session_abort(sessionId)
-      return present_to_user(summary, "stall detecte")
+      return present_to_user(summary, "stall detected")
   wait 30-60s
 ```
 
-### Limite assumee
+### Known limitation
 
-Si l'utilisateur passe a un autre sujet pendant qu'OpenCode tourne, ce skill ne re-poll pas tout seul en background. Le stall detection ne fonctionne que dans le tour de conversation actif (cf. design doc R5).
+If the user moves to another topic while OpenCode is running, this skill does not re-poll on its own in the background. Stall detection only works within the active conversation turn (see design doc R5).
 
-### Inspiration : activity-based timeout (Hermes pattern)
+### Inspiration: activity-based timeout (Hermes pattern)
 
-Cette heuristique est alignee sur l'approche activity-based timeout decrite dans hermes-agent (NousResearch) : au lieu de tuer une tache apres N secondes wall-clock, on track le timestamp du dernier signal d'activite (changement de filesChanged / todosCompleted / nouveau message) et on ne declenche le stall que si AUCUNE activite n'a eu lieu depuis le seuil. Ca distingue "tache complexe qui travaille" de "tache bloquee sur un appel mort". Cf. hermes-agent issue #4815 et PR #4864 pour le contexte canonique.
+This heuristic is aligned with the activity-based timeout approach described in hermes-agent (NousResearch): instead of killing a task after N wall-clock seconds, we track the timestamp of the last activity signal (change in filesChanged / todosCompleted / new message) and only trigger the stall if NO activity has occurred since the threshold. This distinguishes "complex task that is working" from "task stuck on a dead call". See hermes-agent issue #4815 and PR #4864 for canonical context.
 
-### Quand NE PAS appliquer
+### When NOT to apply
 
-- Taches opencode_fire que tu ne supervises pas activement
-- Taches tres courtes (moins de 1 min de timeout) ou le timeout naturel suffit
+- opencode_fire tasks that you are not actively supervising
+- Very short tasks (under 1 min timeout) where the natural timeout suffices
 
-## 5. Politique de parallelisation (max 3 concurrentes)
+## 5. Parallelization policy (max 3 concurrent)
 
-Cowork peut dispatcher plusieurs sessions OpenCode en parallele via opencode_fire, mais sans limite ca consomme RAM, quota provider, et peut creer des conflits de fichiers sur le meme repo.
+Cowork can dispatch multiple OpenCode sessions in parallel via opencode_fire, but without limits this consumes RAM, provider quota, and can create file conflicts on the same repo.
 
-### Politique par defaut
+### Default policy
 
-- Max 3 sessions concurrentes sur le meme projet (meme directory)
-- Au-dela : serialiser (lance les 3 premieres, attends qu'une finisse pour lancer la 4e)
-- Pas de limite intra-skill entre projets distincts - OpenCode et le provider LLM gerent leur propre rate limiting
+- Max 3 concurrent sessions on the same project (same directory)
+- Beyond that: serialize (launch the first 3, wait for one to finish before launching the 4th)
+- No intra-skill limit between distinct projects — OpenCode and the LLM provider manage their own rate limiting
 
-### Override par l'utilisateur
+### User override
 
-Variable d'environnement OPENCODE_AGENT_MAX_PARALLEL (lue au demarrage via opencode_setup ou opencode_context). Valeurs raisonnables :
-- 1 = strictement sequentiel (machines modestes ou rate limit serre)
-- 3 = defaut
-- 5+ = pour machines puissantes avec providers tolerants
+Environment variable OPENCODE_AGENT_MAX_PARALLEL (read at startup via opencode_setup or opencode_context). Reasonable values:
+- 1 = strictly sequential (modest machines or tight rate limit)
+- 3 = default
+- 5+ = for powerful machines with tolerant providers
 
-### Detection proactive des conflits de fichiers
+### Proactive detection of file conflicts
 
-Quand l'utilisateur demande 2+ taches sur le meme repo, detecte si elles risquent de toucher les memes fichiers avant de paralleliser :
+When the user requests 2+ tasks on the same repo, detect whether they might touch the same files before parallelizing:
 
-| Cas | Strategie |
+| Case | Strategy |
 |---|---|
-| Taches sur modules/dossiers distincts | Parallele (jusqu'a 3) |
-| Taches sur meme module | Serie |
-| Taches d'ampleur globale (architecture, lint complet) | Serie |
-| Doute | Serie + demande a l'utilisateur |
+| Tasks on distinct modules/folders | Parallel (up to 3) |
+| Tasks on the same module | Serial |
+| Global-scope tasks (architecture, full lint) | Serial |
+| Doubt | Serial + ask user |
 
-### Exemples concrets
+### Concrete examples
 
-| Demande utilisateur | Strategie |
+| User request | Strategy |
 |---|---|
-| "refactor le module auth ET ajoute des tests au module auth" | Memes fichiers probables -> serie |
-| "refactor le module auth ET refactor le module payments" | Fichiers distincts -> parallele OK |
-| "refactor toute la base de code" | Spectre large -> serie |
+| "refactor the auth module AND add tests to the auth module" | Same files likely → serial |
+| "refactor the auth module AND refactor the payments module" | Distinct files → parallel OK |
+| "refactor the entire codebase" | Broad scope → serial |
 
-### Exemple de dispatch parallele
+### Parallel dispatch example
 
 ```
-fire(prompt: "cd /repo && refactor le module auth pour utiliser JWT") -> sessionId A
-fire(prompt: "cd /repo && ajoute la validation Zod aux endpoints payments") -> sessionId B
-fire(prompt: "cd /repo && documente les endpoints publics") -> sessionId C
+fire(prompt: "cd /repo && refactor the auth module to use JWT") -> sessionId A
+fire(prompt: "cd /repo && add Zod validation to payments endpoints") -> sessionId B
+fire(prompt: "cd /repo && document the public endpoints") -> sessionId C
 
-# Plus tard, l'utilisateur demande le statut
-sessions_overview() -> etat des 3
+# Later, user asks for status
+sessions_overview() -> state of the 3
 check(A); check(B); check(C)
 ```
 
-### Quand l'utilisateur demande plus que 3
+### When the user requests more than 3
 
-"Tu veux 5 refactors en parallele. Par defaut je limite a 3 concurrent pour ne pas saturer ton provider LLM. Je lance les 3 premiers maintenant et les 2 suivants des qu'une slot se libere. Tu confirmes, ou tu veux que j'override OPENCODE_AGENT_MAX_PARALLEL ?"
+"You want 5 refactors in parallel. By default I cap at 3 concurrent to avoid saturating your LLM provider. I'm launching the first 3 now and the next 2 as soon as a slot frees up. Confirm, or do you want me to override OPENCODE_AGENT_MAX_PARALLEL?"
 
-## 6. Install assistee OpenCode au 1er run
+## 6. Assisted OpenCode install on first run
 
-Au 1er run du skill sur la machine d'un utilisateur, OpenCode peut ne pas etre installe. Le skill detecte ca et propose l'install au lieu d'echouer en mode opaque.
+On the first run of the skill on a user's machine, OpenCode may not be installed. The skill detects this and proposes installation instead of failing opaquely.
 
 ### Detection
 
-1. Au debut de chaque session orchestrator, appeler opencode_setup
-2. Si l'outil rapporte "opencode binary not found" ou erreur de connexion, on est dans le cas absent
-3. Si OK, on continue normalement (pas de re-detection a chaque tache)
+1. At the start of each orchestrator session, call opencode_setup
+2. If the tool reports "opencode binary not found" or connection error, we're in the absent case
+3. If OK, continue normally (no re-detection on each task)
 
-### Detection de l'OS
+### OS detection
 
-Plusieurs methodes (utiliser celle qui marche en premier) :
-- Cowork connait son OS host (Windows/macOS/Linux/WSL)
-- Via bash sandbox : uname -a, contenu de /etc/os-release
-- En dernier recours : demander a l'utilisateur
+Several methods (use whichever works first):
+- Cowork knows its host OS (Windows/macOS/Linux/WSL)
+- Via bash sandbox: uname -a, contents of /etc/os-release
+- Last resort: ask the user
 
-### Commandes d'install par plateforme
+### Install commands by platform
 
-Windows (PowerShell, primaire pour Mekaret) :
+Windows (PowerShell, primary for Mekaret):
 ```
 irm https://opencode.ai/install.ps1 | iex
 ```
-Alternatives : scoop install opencode (si scoop installe), choco install opencode (si choco)
+Alternatives: scoop install opencode (if scoop installed), choco install opencode (if choco)
 
-macOS :
+macOS:
 ```
 brew install anomalyco/tap/opencode
 ```
-Alternative : curl -fsSL https://opencode.ai/install | bash
+Alternative: curl -fsSL https://opencode.ai/install | bash
 
-Linux :
+Linux:
 ```
 curl -fsSL https://opencode.ai/install | bash
 ```
-Alternatives : npm i -g opencode-ai (si Node.js dispo), nix run nixpkgs#opencode (NixOS), sudo pacman -S opencode (Arch)
+Alternatives: npm i -g opencode-ai (if Node.js available), nix run nixpkgs#opencode (NixOS), sudo pacman -S opencode (Arch)
 
-WSL (Linux dans Windows) : equivalent Linux ci-dessus.
+WSL (Linux in Windows): same as Linux above.
 
-### Flux UX (mode standard)
+### UX flow (standard mode)
 
-Tu dis a l'utilisateur :
+You tell the user:
 
-"OpenCode n'est pas installe sur ta machine. Tu veux que je l'installe ? La commande sera :
+"OpenCode is not installed on your machine. Want me to install it? The command will be:
 
-[commande adaptee a ton OS]
+[command adapted to your OS]
 
-Confirme avec 'oui' et je lance, ou refuse pour rester sans OpenCode."
+Confirm with 'yes' and I'll run it, or decline to stay without OpenCode."
 
-Si l'utilisateur confirme :
-1. Executer la commande via bash sandbox Cowork
-2. Attendre la fin du telechargement (30s-1min typiquement)
-3. Re-tester opencode_setup pour confirmer
-4. Si OK : "OpenCode installe ! Je peux attaquer ta tache."
-5. Si echec : presenter l'erreur et proposer install manuelle ou autre methode
+If the user confirms:
+1. Run the command via Cowork bash sandbox
+2. Wait for the download to complete (typically 30s-1min)
+3. Re-test opencode_setup to confirm
+4. If OK: "OpenCode installed! I can start on your task."
+5. If failure: present the error and propose manual install or alternative method
 
-### Decisions explicites
+### Explicit decisions
 
-- Pas d'install silencieuse - validation utilisateur obligatoire
-- Pas de re-detection a chaque session - une fois installe, on assume
-- Pas de mise a jour automatique - si l'utilisateur veut updater, il le fait manuellement
+- No silent install — user validation required
+- No re-detection on each session — once installed, assume it's there
+- No automatic updates — if the user wants to update, they do it manually
 
-## 7. Lecture AGENTS.md du repo cible
+## 7. Reading target repo's AGENTS.md
 
-OpenCode (cf. anomalyco/opencode) lit nativement un fichier AGENTS.md a la racine du repo cible pour injecter du contexte projet dans toutes ses sessions. C'est l'equivalent de CLAUDE.md cote Cowork.
+OpenCode (see anomalyco/opencode) natively reads an AGENTS.md file at the root of the target repo to inject project context into all its sessions. It's the OpenCode equivalent of CLAUDE.md on the Cowork side.
 
-### Au debut de chaque tache OpenCode sur un nouveau projet
+### At the start of each OpenCode task on a new project
 
-1. Verifier si AGENTS.md existe a la racine du repo cible (test via opencode_file_read ou un cat dans le prompt)
-2. Si present :
-   - Lire le contenu
-   - Resumer en 2-3 lignes a l'utilisateur : "Ce projet a un AGENTS.md qui documente : X, Y, Z. Je vais en tenir compte."
-   - Pas besoin de l'inclure manuellement dans le prompt a OpenCode - OpenCode le lit deja nativement
-3. Si absent : ne rien faire de special, juste continuer
+1. Check if AGENTS.md exists at the root of the target repo (test via opencode_file_read or a cat in the prompt)
+2. If present:
+   - Read the content
+   - Summarize in 2-3 lines to the user: "This project has an AGENTS.md documenting: X, Y, Z. I'll take it into account."
+   - No need to manually include it in the OpenCode prompt — OpenCode already reads it natively
+3. If absent: nothing special, just continue
 
-### Que faire si l'utilisateur veut creer un AGENTS.md (en MVP)
+### What to do if the user wants to create an AGENTS.md (in MVP)
 
-Le plugin NE CREE PAS d'AGENTS.md automatiquement en MVP. L'ecriture dans le repo cible vient en v1.5 avec opt-in explicite (cf. design doc Q9).
+The plugin does NOT automatically create AGENTS.md in MVP. Writing to the target repo comes in v1.5 with explicit opt-in (see design doc Q9).
 
-Si l'utilisateur demande "tu peux creer un AGENTS.md pour ce projet ?" :
-- Proposer la creation comme une tache normale via OpenCode (agent build, opencode_run)
-- L'utilisateur valide le contenu avant le commit
-- Pas de balises HTML de section automatique en MVP - c'est manuel
+If the user asks "can you create an AGENTS.md for this project?":
+- Propose creation as a normal task via OpenCode (build agent, opencode_run)
+- The user validates the content before the commit
+- No automatic HTML section tags in MVP — that's manual
 
-### Limites en MVP
+### MVP limitations
 
-- Lecture seule : pas d'ecriture automatique
-- Pas de bootstrap auto sur nouveaux projets
-- Pas de sync depuis task-memory (n'existe pas encore en MVP, viendra en v1.2)
-- Tout ca arrive en v1.5 avec opt-in explicite par projet
+- Read-only: no automatic writing
+- No auto-bootstrap on new projects
+- No sync from task-memory (not yet in MVP, coming in v1.2)
+- All of this arrives in v1.5 with explicit per-project opt-in
 
-## 8. Format de resultat (mode standard vs mode dev)
+## 8. Result format (standard mode vs dev mode)
 
-Cowork sert deux audiences (cf. design doc Q3) : des utilisateurs grand public ET des devs. Tu adaptes ton format de sortie selon le contexte. Approche : progressive disclosure.
+Cowork serves two audiences (see design doc Q3): general public users AND developers. You adapt your output format based on context. Approach: progressive disclosure.
 
-### Mode standard (par defaut)
+### Standard mode (default)
 
-Langage naturel, resume synthetique. Pas de jargon technique sauf si l'utilisateur l'a utilise en premier.
+Natural language, synthetic summary. No technical jargon unless the user used it first.
 
-Template de reponse apres une tache reussie :
+Response template after a successful task:
 
-OK J'ai [resume en 1 phrase de ce qui a ete fait].
+Done. I [1-sentence summary of what was done].
 
-Fichiers modifies :
-- chemin/relatif/fichier1.ext (resume d'1 ligne)
-- chemin/relatif/fichier2.ext (resume d'1 ligne)
+Modified files:
+- relative/path/file1.ext (1-line summary)
+- relative/path/file2.ext (1-line summary)
 
-[Si pertinent : tests passent / build OK / autre validation]
+[If relevant: tests pass / build OK / other validation]
 
-Tu veux que je [proposition d'etape suivante naturelle] ?
+Want me to [natural next step proposal]?
 
-Template apres echec ou tache tronquee (stall) :
+Template after failure or truncated task (stall):
 
-Tache partiellement terminee.
+Task partially completed.
 
-Voici ou on en est :
-- [Ce qui a ete fait]
-- [Ce qui reste]
+Here's where we stand:
+- [What was done]
+- [What remains]
 
-Raison : [resume court, sans details techniques]
+Reason: [short summary, no technical details]
 
-On continue, on reprend autrement, ou tu veux voir les details ?
+Shall we continue, retry differently, or do you want to see the details?
 
-### Mode dev (active sur demande)
+### Dev mode (activated on demand)
 
-L'utilisateur active le mode dev en demandant explicitement : "montre les details", "mode dev", "explique-toi techniquement", "donne-moi le session ID", etc. Une fois active, tu inclus :
-- Le sessionId OpenCode (pour drill-down via opencode_conversation)
-- L'agent utilise (build / plan / custom)
-- Le provider et modele effectifs (si differents du defaut)
-- Le temps ecoule et le nombre d'iterations
-- Les outils OpenCode appeles en interne (resume)
+The user activates dev mode by explicitly requesting: "show details", "dev mode", "explain technically", "give me the session ID", etc. Once activated, you include:
+- The OpenCode sessionId (for drill-down via opencode_conversation)
+- The agent used (build / plan / custom)
+- The effective provider and model (if different from the default)
+- Elapsed time and number of iterations
+- OpenCode tools called internally (summary)
 
-Template mode dev :
+Dev mode template:
 
-Tache terminee - details techniques
+Task completed - technical details
 
-Session : ses_xxxxx (agent: build, provider: anthropic, model: claude-sonnet-4-6)
-Duree : 4min12s (8 iterations OpenCode)
-Outils invoques : opencode_find_text (3x), opencode_file_read (12x), opencode_message_send (2x)
+Session: ses_xxxxx (agent: build, provider: anthropic, model: claude-sonnet-4-6)
+Duration: 4min12s (8 OpenCode iterations)
+Tools invoked: opencode_find_text (3x), opencode_file_read (12x), opencode_message_send (2x)
 
-Diff resume :
-- auth.ts : +47 lignes, -23 lignes
-- middleware.ts : +12 lignes, -4 lignes
-- types.ts : +8 lignes
+Diff summary:
+- auth.ts: +47 lines, -23 lines
+- middleware.ts: +12 lines, -4 lines
+- types.ts: +8 lines
 
-Pour drill-down :
-- opencode_conversation avec sessionId ses_xxxxx pour l'historique complet
-- opencode_review_changes avec sessionId ses_xxxxx pour le diff brut
+For drill-down:
+- opencode_conversation with sessionId ses_xxxxx for full history
+- opencode_review_changes with sessionId ses_xxxxx for raw diff
 
-Tu n'imposes pas le mode dev - c'est progressive disclosure. Tu commences en standard, l'utilisateur ouvre le tiroir technique s'il en a envie.
+You don't impose dev mode — it's progressive disclosure. You start in standard mode, the user opens the technical drawer if they want.
 
 ---
 
-## Notes techniques
+## Technical notes
 
-### Workaround - parametre directory opencode-mcp
+### Workaround - opencode-mcp directory parameter
 
-ATTENTION : Bug observe (au moins versions 1.10.x) : passer le parametre directory a opencode_run / opencode_ask / opencode_fire avec un chemin absolu valide peut produire :
+WARNING: Bug observed (at least versions 1.10.x): passing the directory parameter to opencode_run / opencode_ask / opencode_fire with a valid absolute path may produce:
 
-Error: Invalid directory: "/chemin/absolu/valide" is not an absolute path.
+Error: Invalid directory: "/valid/absolute/path" is not an absolute path.
 
-C'est un faux positif cote validation opencode-mcp.
+This is a false positive on the opencode-mcp validation side.
 
-Comportement a appliquer : si le parametre directory est rejete avec ce message, NE PAS le passer du tout. A la place, prefixer le prompt par "cd /chemin/absolu && " pour que OpenCode resolve le contexte via le shell.
+Behavior to apply: if the directory parameter is rejected with this message, DO NOT pass it at all. Instead, prefix the prompt with "cd /absolute/path && " so that OpenCode resolves the context via the shell.
 
-Exemples :
+Examples:
 
-Cas qui marche :
-opencode_run avec prompt "cd /mnt/d/Projects/myproject && analyse le module auth" et agent "build".
+What works:
+opencode_run with prompt "cd /mnt/d/Projects/myproject && analyse the auth module" and agent "build".
 
-A eviter tant que le bug est present :
-opencode_run avec prompt "analyse le module auth", directory "/mnt/d/Projects/myproject" (rejete), agent "build".
+To avoid while the bug is present:
+opencode_run with prompt "analyse the auth module", directory "/mnt/d/Projects/myproject" (rejected), agent "build".
 
-A retirer de cette section quand le bug upstream est corrige. Tracer ici la version d'opencode-mcp qui corrige : (en attente).
+Remove this section when the upstream bug is fixed. Track the opencode-mcp version that fixes it here: (pending).

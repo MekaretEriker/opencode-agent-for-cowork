@@ -5,171 +5,171 @@ description: "Use this skill after an OpenCode task with the build agent reports
 
 # opencode-result-validator
 
-## Nature et portee
+## Nature and scope
 
-Skill instructionnel qui s'active **apres** qu'une session OpenCode (typiquement `opencode_run` ou la phase `opencode_check` suite a `opencode_fire`) rapporte "terminé" sur une tache de modification. Avant de declarer le succes a l'utilisateur, tu valides systematiquement que le resultat tient debout.
+Instructional skill that activates **after** an OpenCode session (typically `opencode_run` or the `opencode_check` phase following `opencode_fire`) reports "completed" on a modification task. Before declaring success to the user, you systematically validate that the result holds up.
 
-C'est le **3e step du pattern Plan-Execute-Reflect** (cf. design doc §13.1 et §5.6 originel). L'agent `plan` natif d'OpenCode fait le "Plan" pour les taches exploratoires. L'agent `build` fait l'"Execute". Ce skill fait le "Reflect".
+This is the **3rd step of the Plan-Execute-Reflect pattern** (see design doc §13.1 and original §5.6). OpenCode's native `plan` agent handles the "Plan" for exploratory tasks. The `build` agent handles the "Execute". This skill handles the "Reflect".
 
-**Sans ce skill** : Cowork pourrait te dire "Termine" alors que les tests sont rouges, que le diff contient des modifications hors scope, ou que la fonctionnalite ne compile pas. Faux positif.
+**Without this skill**: Cowork could tell you "Done" while tests are red, the diff contains out-of-scope modifications, or the feature doesn't compile. False positive.
 
-**Avec ce skill** : tu verifies avant de remettre le resultat. Si pb detecte, tu presentes avec "reserves" plutot que succes brut.
+**With this skill**: you verify before handing back the result. If an issue is detected, you present it with "caveats" rather than a raw success.
 
-## Composabilite avec MCPs utilisateur
+## Composability with user MCPs
 
-Si l'utilisateur a un MCP exposant un tool `validate` ou equivalent (typiquement un vault Relkhon-style avec validation semantique cross-specs, ou un linter custom domaine), ce MCP est **plus fin** pour son projet. Ce skill couvre uniquement les checks generiques.
+If the user has an MCP exposing a `validate` tool or equivalent (typically a Relkhon-style vault with semantic cross-spec validation, or a custom domain linter), that MCP is **more precise** for their project. This skill only covers generic checks.
 
-Au 1er run sur un projet, si un MCP user-side avec `validate` est detecte, propose :
+On the first run on a project, if a user-side MCP with `validate` is detected, offer:
 
-- (a) Remplacer la validation plugin par l'appel au tool MCP (substitution)
-- (b) Chainer les deux : plugin = checks generiques (diff/tests), MCP user = checks domaine (semantique)
-- (c) Garder seulement le plugin
+- (a) Replace plugin validation with a call to the MCP tool (substitution)
+- (b) Chain both: plugin = generic checks (diff/tests), user MCP = domain checks (semantic)
+- (c) Keep only the plugin
 
-Voir design doc §6.2.2.
+See design doc §6.2.2.
 
-## Quand activer
+## When to activate
 
-Active toujours apres :
+Always activate after:
 
-- `opencode_run` ou `opencode_check` montrant `idle/finished` sur une tache d'agent `build`
-- Recuperation d'une session orpheline (cf. orchestrator §2)
-- Toute tache dont le prompt initial etait `feature_implementation`, `bug_fix`, ou `refactor`
+- `opencode_run` or `opencode_check` showing `idle/finished` on a `build` agent task
+- Recovery of an orphaned session (see orchestrator §2)
+- Any task whose initial prompt was `feature_implementation`, `bug_fix`, or `refactor`
 
-NE PAS activer apres :
+Do NOT activate after:
 
-- `opencode_ask` (lecture seule)
-- Taches d'agent `plan` (exploration / analyse, aucun fichier modifie)
-- Taches tres courtes (moins de 30s de duree) — pas le cout/benefice
+- `opencode_ask` (read-only)
+- `plan` agent tasks (exploration / analysis, no files modified)
+- Very short tasks (under 30s duration) — cost/benefit not favorable
 
-Skip-able sur demande utilisateur :
+Skippable on user request:
 
-- Si l'utilisateur dit "skip validation" ou "no checks", tu skip pour la session courante
-- Confirme une fois : "OK, je skippe les checks de validation pour cette conv. Tu vois directement les resultats d'OpenCode."
+- If the user says "skip validation" or "no checks", skip for the current session
+- Confirm once: "OK, I'm skipping validation checks for this conversation. You'll see OpenCode results directly."
 
-## Checks systematiques (par ordre)
+## Systematic checks (in order)
 
-### 1. Diff sain (toujours)
+### 1. Clean diff (always)
 
-Appelle `opencode_review_changes` (ou `opencode_session_diff`) pour recuperer le diff complet de la session.
+Call `opencode_review_changes` (or `opencode_session_diff`) to retrieve the full session diff.
 
-Verifie :
+Verify:
 
-- Les fichiers modifies sont-ils dans le scope annonce en Plan ?
-- Y a-t-il des modifications inattendues (fichiers de config sensibles, secrets, etc.) ?
-- Le diff est-il de la taille raisonnable attendue ?
+- Are the modified files within the scope announced in Plan?
+- Are there unexpected modifications (sensitive config files, secrets, etc.)?
+- Is the diff of the expected reasonable size?
 
-Si anomalie detectee, annote dans le resume final.
+If an anomaly is detected, annotate in the final summary.
 
-### 2. Tests (si detectables)
+### 2. Tests (if detectable)
 
-Detecte la commande de test du projet via heuristique :
+Detect the project's test command via heuristic:
 
-- Presence de `package.json` avec script `test` -> `npm test`
-- Presence de `pyproject.toml`/`setup.py` avec pytest -> `pytest`
-- Presence de `Cargo.toml` -> `cargo test`
-- Presence de `build.gradle` -> `gradle test`
-- Sinon -> skip (pas de tests detectables)
+- Presence of `package.json` with `test` script -> `npm test`
+- Presence of `pyproject.toml`/`setup.py` with pytest -> `pytest`
+- Presence of `Cargo.toml` -> `cargo test`
+- Presence of `build.gradle` -> `gradle test`
+- Otherwise -> skip (no detectable tests)
 
-Lance via OpenCode une commande courte type :
+Run via OpenCode a short command like:
 
 ```
 opencode_ask(prompt: "Run the project tests once and tell me pass/fail with a summary. Don't fix anything, just report.")
 ```
 
-Analyse la reponse, si tests rouges, note dans le resume.
+Parse the response; if tests are red, note it in the summary.
 
-### 3. Build / compilation (si pertinent)
+### 3. Build / compilation (if relevant)
 
-Pour TypeScript, Rust, C++ et autres langages compiles :
+For TypeScript, Rust, C++ and other compiled languages:
 
-- TS : `npm run build` ou `tsc --noEmit`
-- Rust : `cargo build`
+- TS: `npm run build` or `tsc --noEmit`
+- Rust: `cargo build`
 - etc.
 
-Si le build casse, c'est un echec critique de la validation.
+If the build breaks, this is a critical validation failure.
 
-### 4. Coherence semantique (soft check via Claude)
+### 4. Semantic coherence (soft check via Claude)
 
-Question directe au sub-LLM (toi-meme) : "Le resultat repond-il vraiment a la demande initiale ? Y a-t-il une divergence entre ce qui a ete demande et ce qui a ete fait ?"
+Direct question to the sub-LLM (yourself): "Does the result truly answer the initial request? Is there a divergence between what was asked and what was done?"
 
-C'est qualitatif. Si tu detectes une divergence (ex: "j'ai demande de refactor le module auth mais OpenCode a aussi modifie le module payments"), tu l'annotes.
+This is qualitative. If you detect a divergence (e.g., "I asked to refactor the auth module but OpenCode also modified the payments module"), annotate it.
 
-## Format de sortie
+## Output format
 
-### En cas de succes complet
-
-```
-Tache terminee
-
-[resume en 1 phrase de ce qui a ete fait]
-
-Fichiers modifies :
-- chemin/fichier1.ext (resume)
-- chemin/fichier2.ext (resume)
-
-Validation :
-- OK Diff coherent avec la demande
-- OK Tests : 47/47 passent
-- OK Build : OK
-- OK Pas de divergence semantique
-
-Tu veux que je [proposition d'etape suivante naturelle] ?
-```
-
-### En cas de reserves (un check rouge)
+### On full success
 
 ```
-Tache terminee avec reserves
+Task completed
 
-[resume en 1 phrase]
+[1-sentence summary of what was done]
 
-Fichiers modifies :
-- chemin/fichier1.ext (resume)
+Modified files:
+- path/file1.ext (summary)
+- path/file2.ext (summary)
 
-Validation :
+Validation:
+- OK Diff coherent with the request
+- OK Tests: 47/47 pass
+- OK Build: OK
+- OK No semantic divergence
+
+Want me to [natural next step proposal]?
+```
+
+### On caveats (one red check)
+
+```
+Task completed with caveats
+
+[1-sentence summary]
+
+Modified files:
+- path/file1.ext (summary)
+
+Validation:
 - OK Diff coherent
-- KO Tests : 2 echouent (auth.test.ts:142, auth.test.ts:198)
-- OK Build : OK
-- OK Semantique : aligne
+- KO Tests: 2 failing (auth.test.ts:142, auth.test.ts:198)
+- OK Build: OK
+- OK Semantic: aligned
 
-Suggestion : "Cowork, demande a OpenCode de corriger les tests rouges"
+Suggestion: "Ask OpenCode to fix the failing tests"
 ```
 
-### En cas d'echec critique (build casse)
+### On critical failure (broken build)
 
 ```
-Tache terminee avec probleme critique
+Task completed with critical issue
 
-[resume en 1 phrase]
+[1-sentence summary]
 
-Fichiers modifies :
-- chemin/fichier1.ext (resume)
+Modified files:
+- path/file1.ext (summary)
 
-Validation :
-- KO Build : echec compilation (5 erreurs TypeScript)
-- (autres checks skip car build casse)
+Validation:
+- KO Build: compilation failure (5 TypeScript errors)
+- (other checks skipped since build is broken)
 
-Le code ne compile pas en l'etat. Je recommande de :
-- (1) Annuler les changements (git restore)
-- (2) Demander a OpenCode de corriger les erreurs
+The code doesn't compile as-is. I recommend:
+- (1) Revert the changes (git restore)
+- (2) Ask OpenCode to fix the errors
 
-Tu fais quoi ?
+What do you want to do?
 ```
 
-## Inter-fonctionnement avec d'autres skills
+## Inter-skill interactions
 
-- **orchestrator** : appelle ce skill en fin de tache `build`
-- **safe-prompts** : pas d'interaction directe
-- **task-memory** : si la validation echoue, c'est un *antipattern* a noter dans `antipatterns` ("Tache X dispatchee comme Y a echoue la validation Z")
+- **orchestrator**: calls this skill at the end of a `build` task
+- **safe-prompts**: no direct interaction
+- **task-memory**: if validation fails, it's an *antipattern* to note in `antipatterns` ("Task X dispatched as Y failed validation Z")
 
-## Limites assumees
+## Known limitations
 
-- Les tests sont lances **en plus** de l'execution principale -> consomme tokens et temps. Sur les taches tres courtes, ratio cout/benefice defavorable.
-- Si OpenCode lui-meme n'a pas reussi a faire passer les tests, ce skill ne corrige pas, il rapporte seulement.
-- La coherence semantique est qualitative — Claude peut louper une divergence subtile.
+- Tests are run **in addition to** the main execution -> consumes tokens and time. On very short tasks, cost/benefit is unfavorable.
+- If OpenCode itself failed to make the tests pass, this skill reports only, it does not fix.
+- Semantic coherence is qualitative — Claude can miss a subtle divergence.
 
 ## Inspirations
 
-- Pattern Plan-Execute-Reflect : design doc §13.1 (reference canonique : Reflexion 2023, ReAct framework)
-- Composabilite avec validate user-side : §6.2.2
-- swarm-code-plugin a un skill `opencode-result-handling` proche conceptuellement (mais cote Claude Code, pas Cowork)
+- Plan-Execute-Reflect pattern: design doc §13.1 (canonical reference: Reflexion 2023, ReAct framework)
+- Composability with user-side validate: §6.2.2
+- swarm-code-plugin has a conceptually similar `opencode-result-handling` skill (but on Claude Code side, not Cowork)

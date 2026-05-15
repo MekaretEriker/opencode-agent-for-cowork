@@ -5,95 +5,95 @@ description: "Use this skill when an OpenCode dispatch fails with a provider err
 
 # opencode-fallback-chain
 
-## Nature et portee
+## Nature and scope
 
-Skill instructionnel. Quand un appel OpenCode (`opencode_run` / `_ask` / `_fire`) renvoie une erreur indiquant une defaillance du provider (429 rate limit, 5xx server error, "provider unavailable", etc.), tu retry la tache avec le provider suivant dans la chaine configuree, apres un court backoff de 5 secondes. Pas de retry infini : 3 tentatives maximum, chacune avec un provider different. Si les 3 echouent, on abandonne proprement.
+Instructional skill. When an OpenCode call (`opencode_run` / `_ask` / `_fire`) returns an error indicating a provider failure (429 rate limit, 5xx server error, "provider unavailable", etc.), you retry the task with the next provider in the configured chain, after a short 5-second backoff. No infinite retries: 3 attempts maximum, each with a different provider. If all 3 fail, you abort cleanly.
 
-Ce skill ne gere pas les erreurs de transport MCP (timeout 180s, connexion rompue) — celles-ci sont du ressort de l'orchestrator.
+This skill does not handle MCP transport errors (180s timeout, broken connection) — those are the orchestrator's responsibility.
 
-## Composabilite avec MCPs utilisateur
+## Composability with user MCPs
 
-Si l'utilisateur dispose d'un MCP avec sa propre logique de retry (typiquement un gateway LLM custom qui route deja les appels entre providers), c'est ce MCP qui doit gerer le fallback, pas ce skill. Au premier lancement du plugin par projet, le skill propose a l'utilisateur trois options :
+If the user has an MCP with its own retry logic (typically a custom LLM gateway that already routes calls between providers), that MCP should handle the fallback, not this skill. On the first plugin launch per project, the skill offers the user three options:
 
-1. **Substitution** : le MCP custom remplace la chaine de fallback du skill (le skill devient pass-through)
-2. **Chainage** : la chaine du skill s'execute d'abord, et le MCP custom sert de filet de securite en dernier recours
-3. **Skill-only** : desactiver le fallback du MCP custom et laisser le skill gerer entierement (comportement par defaut si aucun MCP custom n'est detecte)
+1. **Substitution**: the custom MCP replaces the skill's fallback chain (the skill becomes pass-through)
+2. **Chaining**: the skill's chain runs first, and the custom MCP acts as a safety net of last resort
+3. **Skill-only**: disable the custom MCP's fallback and let the skill handle everything (default behavior if no custom MCP is detected)
 
-Ce comportement est documente dans le design doc au §6.2.2.
+This behavior is documented in the design doc at §6.2.2.
 
-## Declencheurs
+## Triggers
 
-Patterns d'erreur a detecter dans les reponses d'OpenCode (dans le champ `error` ou le message textuel de la reponse) :
+Error patterns to detect in OpenCode responses (in the `error` field or the textual response message):
 
 - `"rate limit"`, `"429"`, `"TooManyRequests"`
 - `"5xx"`, `"500"`, `"502"`, `"503"`, `"504"`, `"internal server error"`
 - `"provider unavailable"`, `"service unavailable"`
-- `"timeout to upstream"` (a distinguer du timeout MCP transport de 180s, qui lui est gere par l'orchestrator)
+- `"timeout to upstream"` (to distinguish from the MCP transport timeout of 180s, which is handled by the orchestrator)
 
-Ne **pas** retry sur les codes d'erreur client :
+Do **not** retry on client error codes:
 
-- **400** : prompt invalide ou mal forme — retry inutile, le probleme est dans la requete
-- **401 / 403** : authentification absente ou refusee — changer de provider ne resoudra pas le probleme
-- **Timeout MCP transport (~180s)** : gere par l'orchestrator avec le pattern de recuperation de session orpheline, pas par ce skill
+- **400**: invalid or malformed prompt — retry is useless, the problem is in the request
+- **401 / 403**: missing or refused authentication — switching providers won't solve this
+- **MCP transport timeout (~180s)**: handled by the orchestrator with the orphaned session recovery pattern, not by this skill
 
-En cas de doute sur la nature de l'erreur (message ambigu qui pourrait etre un 5xx deguise), appliquer le principe de precaution et tenter le fallback — un retry inutile est moins couteux qu'un abandon premature.
+When in doubt about the nature of the error (ambiguous message that could be a disguised 5xx), apply the precautionary principle and attempt the fallback — a useless retry is less costly than a premature abort.
 
-## Chaine par defaut
+## Default chain
 
-Si aucune chaine n'est explicitement configuree par l'utilisateur, la chaine par defaut est :
+If no chain is explicitly configured by the user, the default chain is:
 
 ```
 anthropic -> openrouter -> openai
 ```
 
-Si l'utilisateur a configure des providers via `opencode_provider_list`, le skill utilise ces providers dans l'ordre de leur listing (generalement par priorite decroissante, telle que definie dans la configuration OpenCode de l'utilisateur).
+If the user has configured providers via `opencode_provider_list`, the skill uses those providers in their listing order (generally by decreasing priority, as defined in the user's OpenCode configuration).
 
-## Configuration utilisateur
+## User configuration
 
-La variable d'environnement `OPENCODE_AGENT_PROVIDER_CHAIN` permet de surcharger la chaine par defaut. Format : liste de noms de providers separes par des virgules.
+The environment variable `OPENCODE_AGENT_PROVIDER_CHAIN` allows overriding the default chain. Format: comma-separated list of provider names.
 
-Exemple :
+Example:
 
 ```
 OPENCODE_AGENT_PROVIDER_CHAIN=anthropic,deepseek,openrouter
 ```
 
-Cette variable est lue au demarrage de session via `opencode_setup` ou `opencode_context`. Si la variable est absente ou vide, la chaine par defaut s'applique.
+This variable is read at session startup via `opencode_setup` or `opencode_context`. If the variable is absent or empty, the default chain applies.
 
-Autre variable d'environnement reconnue (future iteration) :
+Another recognized environment variable (future iteration):
 
 ```
 OPENCODE_AGENT_FALLBACK_BACKOFF_SEC=10
 ```
 
-En MVP (v0.5.0), le backoff est fixe a 5 secondes. La configurabilite du backoff est prevue pour une iteration ulterieure si le besoin emerge du terrain.
+In MVP (v0.5.0), the backoff is fixed at 5 seconds. Configurable backoff is planned for a future iteration if field feedback justifies it.
 
-## Marche a suivre
+## Procedure
 
-1. **Detecter** le pattern d'erreur dans la reponse OpenCode (cf. section Declencheurs)
-2. **Identifier** le provider qui a echoue via le `sessionId` courant et un appel a `opencode_session_get`
-3. **Chercher** le provider suivant dans la chaine configuree (chaine utilisateur si definie, sinon chaine par defaut)
-4. **Annoncer** en mode standard : "Le provider X a renvoye [type d'erreur]. Je retry avec Y, patiente 5 secondes..."
-5. **Attendre** 5 secondes (backoff fixe)
-6. **Relancer** la tache avec le nouveau provider en passant un `providerID` explicite dans le prochain appel `opencode_run`, `opencode_ask` ou `opencode_fire`
-7. **Si 3 echecs successifs** sur 3 providers differents : abandonner et presenter une erreur claire a l'utilisateur ("Les 3 providers de la chaine ont echoue : [details]. Verifie ta connectivite et tes cles API."). Ne pas relancer automatiquement.
-8. **Si succes** : mettre a jour `task-memory` (si le skill task-memory est actif, v0.3.0+) en incrementant `providerStats.<previousProvider>.failureCount` pour ajuster les choix futurs de l'orchestrator.
+1. **Detect** the error pattern in the OpenCode response (see Triggers section)
+2. **Identify** the provider that failed via the current `sessionId` and a call to `opencode_session_get`
+3. **Find** the next provider in the configured chain (user chain if defined, otherwise default chain)
+4. **Announce** in standard mode: "Provider X returned [error type]. Retrying with Y, please wait 5 seconds..."
+5. **Wait** 5 seconds (fixed backoff)
+6. **Re-dispatch** the task with the new provider by passing an explicit `providerID` in the next `opencode_run`, `opencode_ask`, or `opencode_fire` call
+7. **If 3 consecutive failures** across 3 different providers: abort and present a clear error to the user ("All 3 providers in the chain failed: [details]. Check your connectivity and API keys."). Do not automatically retry.
+8. **On success**: update `task-memory` (if the task-memory skill is active, v0.3.0+) by incrementing `providerStats.<previousProvider>.failureCount` to adjust the orchestrator's future choices.
 
-## Limites
+## Limitations
 
-- **Pas de switch en cours de session OpenCode existante.** Le fallback s'applique a la **prochaine tache dispatchee**, pas a une session deja active. Si une session est en cours et que son provider echoue en milieu d'execution, le fallback ne peut pas reprendre la session — il faut relancer la tache entiere avec un nouveau provider.
-- **Si tous les providers configures echouent**, l'erreur est remontee a l'utilisateur. Pas de fallback infini ni de boucle silencieuse.
-- **Le backoff de 5 secondes est fixe en MVP.** Une future iteration pourra le rendre configurable via `OPENCODE_AGENT_FALLBACK_BACKOFF_SEC` si les retours utilisateur le justifient.
-- **Le skill ne fait pas de distinction entre les providers.** Il suit l'ordre de la chaine, sans logique de cout, de latence ou de preference regionale. Ces optimisations sont hors scope du MVP.
+- **No mid-session switch for an active OpenCode session.** The fallback applies to the **next dispatched task**, not to an already active session. If a session is running and its provider fails mid-execution, the fallback cannot resume the session — the entire task must be re-launched with a new provider.
+- **If all configured providers fail**, the error is surfaced to the user. No infinite fallback or silent loop.
+- **The 5-second backoff is fixed in MVP.** A future iteration may make it configurable via `OPENCODE_AGENT_FALLBACK_BACKOFF_SEC` if user feedback justifies it.
+- **The skill makes no distinction between providers.** It follows the chain order, without cost, latency, or regional preference logic. These optimizations are out of scope for the MVP.
 
 ## Inter-skill
 
-- **orchestrator** : appelle ce skill lorsqu'une erreur provider est detectee apres un dispatch (`opencode_run` / `_ask` / `_fire`). L'orchestrator reste maitre du flux : c'est lui qui decide de re-dispatcher avec le nouveau provider.
-- **task-memory** : ce skill ecrit dans le champ `providerStats` (incrementation de `failureCount` par provider) pour que l'orchestrator puisse ajuster ses choix futurs — par exemple, eviter temporairement un provider qui echoue frequemment.
-- **result-validator** : pas d'interaction directe. Le result-validator intervient apres execution reussie, donc apres que le fallback-chain a potentiellement change de provider. Les deux skills operent a des etapes differentes du pipeline.
+- **orchestrator**: calls this skill when a provider error is detected after a dispatch (`opencode_run` / `_ask` / `_fire`). The orchestrator remains master of the flow: it decides to re-dispatch with the new provider.
+- **task-memory**: this skill writes to the `providerStats` field (incrementing `failureCount` per provider) so the orchestrator can adjust its future choices — for example, temporarily avoiding a frequently failing provider.
+- **result-validator**: no direct interaction. The result-validator intervenes after successful execution, i.e., after the fallback-chain has potentially switched providers. Both skills operate at different stages of the pipeline.
 
 ## Inspirations
 
-- Pattern de fallback providers de [hermes-agent](https://github.com/NousResearch/hermes-agent) (NousResearch) : retry avec provider suivant sur erreur transitoire, backoff configurable
-- Retry x3 avec exponential backoff de [swarm-code-plugin](https://github.com/apoapps/swarm-code-plugin)
-- Adaptation Cowork : skill-as-instruction, pas auto-runtime. Le skill fournit la procedure, l'orchestrator Cowork l'execute — pas d'automatisme invisible.
+- Provider fallback pattern from [hermes-agent](https://github.com/NousResearch/hermes-agent) (NousResearch): retry with next provider on transient error, configurable backoff
+- x3 retry with exponential backoff from [swarm-code-plugin](https://github.com/apoapps/swarm-code-plugin)
+- Cowork adaptation: skill-as-instruction, not auto-runtime. The skill provides the procedure, the Cowork orchestrator executes it — no invisible automation.

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-05-15
+
+### Changed
+- All skill bodies translated to English (frontmatter triggers remain bilingual)
+- Frontmatter descriptions enriched with bilingual trigger examples (FR + EN)
+- User-facing French usage unchanged (Cowork routes skills based on description, language-agnostic)
+
 ## [1.0.0] - 2026-05-15
 
 ### Added — Full scope complete

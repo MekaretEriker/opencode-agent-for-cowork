@@ -5,125 +5,125 @@ description: "Use this skill when dispatching to OpenCode and needing to choose 
 
 # opencode-agent-roster
 
-## Nature et portee
+## Nature and scope
 
-Ce skill etend l'orchestrator §3 (choix d'agent) avec trois capacites nouvelles livrees en v0.6.0 :
+This skill extends orchestrator §3 (agent selection) with three new capabilities delivered in v0.6.0:
 
-1. Un agent custom `cowork-with-github`, extension de `build` augmente du MCP GitHub, livre par le plugin
-2. Une heuristique de routing enrichie qui inclut cet agent dans la matrice de decision
-3. Un mecanisme opt-in pour ecrire dans le `AGENTS.md` du repo cible, conforme a la decision Q9 design doc §6.5
+1. A custom agent `cowork-with-github`, an extension of `build` augmented with the GitHub MCP, delivered by the plugin
+2. An enriched routing heuristic that includes this agent in the decision matrix
+3. An opt-in mechanism for writing to the target repo's `AGENTS.md`, conforming to design doc decision Q9 §6.5
 
-Le roster final couvre desormais quatre agents aux profils complementaires, eliminant les zones grises ou le choix d'agent etait ambigu (taches GitHub sans precedent clair dans le routing).
+The final roster now covers four agents with complementary profiles, eliminating grey areas where agent selection was ambiguous (GitHub tasks with no clear routing precedent).
 
-## Roster final (apres v0.6.0)
+## Final roster (after v0.6.0)
 
-| Agent | Origine | Quand l'utiliser |
+| Agent | Origin | When to use |
 |---|---|---|
-| build | natif OpenCode | Tache de modification (refactor, feature, fix) — defaut pour toute tache avec side effects |
-| plan | natif OpenCode | Exploration, review, analyse — read-only, zero side effect |
-| @general | sous-agent natif OpenCode | Recherche complexe multi-etapes necessitant plusieurs rounds de discovery |
-| cowork-with-github | LIVRE par le plugin (v0.6.0) | Taches impliquant PR, issues, branches, ou toute interaction avec l'API GitHub |
+| build | native OpenCode | Modification task (refactor, feature, fix) — default for any task with side effects |
+| plan | native OpenCode | Exploration, review, analysis — read-only, zero side effects |
+| @general | native OpenCode sub-agent | Complex multi-step search requiring several rounds of discovery |
+| cowork-with-github | DELIVERED by plugin (v0.6.0) | Tasks involving PR, issues, branches, or any GitHub API interaction |
 
-Chaque agent a un profil d'outils et un comportement distinct. Le routing doit choisir le plus specialise pour la tache courante, avec fallback explicite si les prerequis (MCP, agent installe) ne sont pas satisfaits.
+Each agent has a distinct tool profile and behavior. Routing must choose the most specialized for the current task, with explicit fallback if prerequisites (MCP, installed agent) are not met.
 
-## Heuristique de choix mise a jour
+## Updated selection heuristic
 
-L'heuristique de routing (orchestrator §3) est etendue avec un nouveau test en tete de chaine :
+The routing heuristic (orchestrator §3) is extended with a new test at the head of the chain:
 
-1. **Detection GitHub** : si le prompt contient "PR", "pull request", "issue", "#\d+", "GitHub", "branche", "merge" → router vers `cowork-with-github`
-   - Verifier la presence du MCP GitHub cote OpenCode via `opencode_mcp_status`
-   - Si MCP GitHub absent : fallback `build` avec note explicite "PR manuelle a faire ensuite"
-   - Si l'agent `cowork-with-github` n'est pas encore installe cote OpenCode : proposer l'installation opt-in (voir section Installation)
-2. **Detection read-only** : si la tache est purement exploratoire sans modification de code → `plan`
-3. **Detection complexite** : si la tache necessite plusieurs rounds de recherche avant l'action → `@general`
-4. **Defaut** : toute autre tache → `build`
+1. **GitHub detection**: if the prompt contains "PR", "pull request", "issue", "#\d+", "GitHub", "branch", "branche", "merge" → route to `cowork-with-github`
+   - Check for GitHub MCP presence on OpenCode side via `opencode_mcp_status`
+   - If GitHub MCP absent: fallback to `build` with explicit note "manual PR needed afterwards"
+   - If `cowork-with-github` agent is not yet installed on OpenCode side: propose opt-in installation (see Installation section)
+2. **Read-only detection**: if the task is purely exploratory without code modification → `plan`
+3. **Complexity detection**: if the task requires multiple rounds of research before action → `@general`
+4. **Default**: all other tasks → `build`
 
-Cette chaine est evaluee sequentiellement. La premiere condition vraie gagne. Les conditions 2 a 4 sont inchangees par rapport a l'orchestrator v0.5.0 ; seule la condition 1 est nouvelle.
+This chain is evaluated sequentially. The first true condition wins. Conditions 2–4 are unchanged from orchestrator v0.5.0; only condition 1 is new.
 
-### Exemples de routage concret
+### Concrete routing examples
 
-| Prompt utilisateur | Agent route | Justification |
+| User prompt | Routed agent | Justification |
 |---|---|---|
-| "Refactor le module factions pour utiliser EventBus" | build | Modification, pas de mot-cle GitHub |
-| "Analyse les dependances circulaires dans src/" | plan | Read-only, exploration |
-| "Trouve tous les appels a deprecatedMethod et propose un plan de migration" | @general | Recherche multi-etapes avant action |
-| "Cree une PR pour le fix du bug #342" | cowork-with-github | Mots-cles PR + issue |
-| "Ouvre une issue pour tracker le refactor du parser" | cowork-with-github | Mot-cle issue + GitHub |
-| "Push la branche feat/auth et ouvre une PR" | cowork-with-github | Mots-cles branche + PR |
+| "Refactor le module factions pour utiliser EventBus" / "Refactor the factions module to use EventBus" | build | Modification, no GitHub keyword |
+| "Analyse les dependances circulaires dans src/" / "Analyze circular dependencies in src/" | plan | Read-only, exploration |
+| "Trouve tous les appels a deprecatedMethod et propose un plan de migration" / "Find all calls to deprecatedMethod and propose a migration plan" | @general | Multi-step research before action |
+| "Cree une PR pour le fix du bug #342" / "Create a PR for the bug fix #342" | cowork-with-github | PR + issue keywords |
+| "Ouvre une issue pour tracker le refactor du parser" / "Open an issue to track the parser refactor" | cowork-with-github | Issue + GitHub keyword |
+| "Push la branche feat/auth et ouvre une PR" / "Push the feat/auth branch and open a PR" | cowork-with-github | Branch + PR keywords |
 
-## Agent cowork-with-github
+## cowork-with-github agent
 
 ### Definition
 
-L'agent est defini dans `agent-templates/cowork-with-github.json` (template a installer cote OpenCode via `opencode_agent_list` + configuration OpenCode native). Caracteristiques techniques :
+The agent is defined in `agent-templates/cowork-with-github.json` (template to install on the OpenCode side via `opencode_agent_list` + native OpenCode configuration). Technical characteristics:
 
-- **Base** : agent `build` natif OpenCode
-- **MCPs requis** : GitHub MCP (typiquement `@modelcontextprotocol/server-github`)
-- **System prompt additionnel** : l'agent prefere creer une branche dediee plutot que de travailler sur main/master, ouvre une PR au lieu de pusher directement, et lie l'issue si une reference est detectee dans le prompt
+- **Base**: native OpenCode `build` agent
+- **Required MCPs**: GitHub MCP (typically `@modelcontextprotocol/server-github`)
+- **Additional system prompt**: the agent prefers creating a dedicated branch rather than working on main/master, opens a PR instead of pushing directly, and links the issue if a reference is detected in the prompt
 
-Ce n'est pas un agent completement distinct — c'est une specialisation de `build` avec un contexte GitHub enrichi. Cette approche minimaliste evite la duplication de la logique de modification de code (deja dans `build`) tout en ajoutant le comportement specifique aux workflows GitHub.
+This is not a completely separate agent — it is a specialization of `build` with an enriched GitHub context. This minimalist approach avoids duplicating code modification logic (already in `build`) while adding GitHub workflow-specific behavior.
 
-### Comportement specific
+### Specific behavior
 
-Quand l'agent `cowork-with-github` est active, il adopte les comportements suivants par defaut (le system prompt les encode) :
+When the `cowork-with-github` agent is activated, it adopts the following default behaviors (encoded in the system prompt):
 
-1. **Branche dediee** : cree une branche nommee d'apres la tache (ex: `feat/auth-jwt`, `fix/issue-342-null-pointer`, `refactor/eventbus-migration`). Ne travaille jamais directement sur `main` ou `master`.
-2. **PR systematique** : ouvre une pull request avec un titre et une description clairs, plutot que de pusher directement sur la branche principale.
-3. **Lien d'issue** : si le prompt contient une reference a un numero d'issue (`#123`), la PR inclut `Closes #123` dans sa description.
-4. **Description structuree** : la PR inclut un resume des changements, la liste des fichiers modifies, et les tests passes.
+1. **Dedicated branch**: creates a branch named after the task (e.g., `feat/auth-jwt`, `fix/issue-342-null-pointer`, `refactor/eventbus-migration`). Never works directly on `main` or `master`.
+2. **Systematic PR**: opens a pull request with a clear title and description, rather than pushing directly to the main branch.
+3. **Issue link**: if the prompt contains a reference to an issue number (`#123`), the PR includes `Closes #123` in its description.
+4. **Structured description**: the PR includes a summary of changes, the list of modified files, and tests passed.
 
-Ces regles sont des preferences, pas des contraintes dures. Si l'utilisateur demande explicitement un push direct, l'agent obeit.
+These rules are preferences, not hard constraints. If the user explicitly requests a direct push, the agent complies.
 
-### Fallback si MCP GitHub absent
+### Fallback if GitHub MCP absent
 
-Si le MCP GitHub n'est pas configure cote OpenCode, l'agent `cowork-with-github` ne peut pas fonctionner. Dans ce cas :
-- Le routing tombe en fallback `build`
-- Une note est ajoutee au rapport de tache : "PR manuelle a faire ensuite — le MCP GitHub n'est pas configure cote OpenCode"
-- L'utilisateur peut configurer le MCP GitHub et reessayer
+If the GitHub MCP is not configured on the OpenCode side, the `cowork-with-github` agent cannot function. In that case:
+- Routing falls back to `build`
+- A note is added to the task report: "Manual PR needed afterwards — GitHub MCP is not configured on OpenCode side"
+- The user can configure the GitHub MCP and retry
 
-## Installation au 1er run sur un projet (opt-in)
+## First-run installation on a project (opt-in)
 
-L'installation de l'agent `cowork-with-github` cote OpenCode suit un protocole opt-in strict :
+Installation of the `cowork-with-github` agent on the OpenCode side follows a strict opt-in protocol:
 
 ### Detection
 
-Au 1er run par projet ou une tache `cowork-with-github`-eligible est detectee, le skill verifie si l'agent existe deja cote OpenCode via `opencode_agent_list`. Si l'agent est absent :
+On the first run per project where a `cowork-with-github`-eligible task is detected, the skill checks whether the agent already exists on the OpenCode side via `opencode_agent_list`. If the agent is absent:
 
-### Proposition
+### Proposal
 
-Le skill propose a l'utilisateur :
-> "Cette tache beneficierait de l'agent custom `cowork-with-github`. Tu veux que je l'installe cote OpenCode ? Il etend `build` avec le MCP GitHub pour gerer les PR et issues automatiquement."
+The skill offers the user:
+> "This task would benefit from the custom `cowork-with-github` agent. Want me to install it on OpenCode? It extends `build` with the GitHub MCP to handle PRs and issues automatically."
 
 ### Installation
 
-Si l'utilisateur accepte :
-1. Ecriture du fichier agent via la configuration OpenCode (format natif OpenCode)
-2. Ajout du MCP GitHub (`@modelcontextprotocol/server-github`) a la configuration OpenCode si absent
-3. Verification que l'agent apparait dans `opencode_agent_list`
+If the user accepts:
+1. Write the agent file via OpenCode configuration (native OpenCode format)
+2. Add the GitHub MCP (`@modelcontextprotocol/server-github`) to OpenCode configuration if absent
+3. Verify the agent appears in `opencode_agent_list`
 
-### Refus
+### Refusal
 
-Si l'utilisateur refuse : fallback `build` avec la note standard "PR manuelle a faire ensuite". Aucune relance sur les taches suivantes du meme projet — le refus est definitif pour ce projet. L'utilisateur peut activer manuellement plus tard avec : "installe l'agent cowork-with-github".
+If the user refuses: fallback to `build` with the standard note "manual PR needed afterwards". No re-prompting on subsequent tasks for the same project — refusal is definitive for this project. The user can activate manually later with: "install the cowork-with-github agent".
 
-## Ecriture AGENTS.md (decision Q9)
+## AGENTS.md writing (decision Q9)
 
-### Principe general
+### General principle
 
-Au 1er run sur un repo, en plus de la lecture obligatoire de `AGENTS.md` (orchestrator §7), le skill propose l'ecriture **opt-in explicite** d'une section maintenue automatiquement dans ce fichier. Cette section alimente la memoire operationnelle du projet au-dela de la session courante.
+On the first run on a repo, in addition to the mandatory reading of `AGENTS.md` (orchestrator §7), the skill proposes **explicit opt-in** writing of an automatically maintained section in this file. This section feeds the project's operational memory beyond the current session.
 
-### Protocole opt-in
+### Opt-in protocol
 
-1. **Proposition unique** : "Tu veux que je maintienne une section dans `AGENTS.md` du repo cible avec les apprentissages cross-sessions (durees observees, patterns reussis, antipatterns) ?"
-2. **Si OK** :
-   - Si `AGENTS.md` est absent du repo, proposer de le creer (avec l'entete standard OpenCode)
-   - Si `AGENTS.md` existe deja, ajouter une section delimitee par des balises HTML : `<!-- Maintained by Cowork OpenCode Agent plugin -->` ... `<!-- end Cowork section -->`
-   - Stocker l'opt-in dans `.opencode-agent-memory.json` avec le champ `agentsMdWriteEnabled: true`
-3. **A chaque tache reussie** : mettre a jour la section avec un resume agrege des apprentissages. Le contenu doit etre lisible et pertinent — pas un dump de stats brutes. Agreger les donnees de `task-memory` en tendances.
-4. **Jamais de commit automatique** : les modifications de `AGENTS.md` restent unstaged. C'est a l'utilisateur de les commiter quand il le juge pertinent.
-5. **Jamais d'ecrasement** : le skill ne touche qu'a la section delimitee. Tout contenu hors balises est preserve a l'identique.
-6. **Refus definitif** : si l'utilisateur refuse au 1er run, ne plus proposer. Il peut activer plus tard via la commande "active AGENTS.md write".
+1. **Single proposal**: "Do you want me to maintain a section in the target repo's `AGENTS.md` with cross-session learnings (observed durations, successful patterns, antipatterns)?"
+2. **If OK**:
+   - If `AGENTS.md` is absent from the repo, offer to create it (with the standard OpenCode header)
+   - If `AGENTS.md` already exists, add a section delimited by HTML tags: `<!-- Maintained by Cowork OpenCode Agent plugin -->` ... `<!-- end Cowork section -->`
+   - Store the opt-in in `.opencode-agent-memory.json` with the field `agentsMdWriteEnabled: true`
+3. **After each successful task**: update the section with an aggregated summary of learnings. Content must be readable and relevant — not a raw stats dump. Aggregate data from `task-memory` into trends.
+4. **Never auto-commit**: `AGENTS.md` modifications remain unstaged. It's up to the user to commit them when they see fit.
+5. **Never overwrite**: the skill only touches the delimited section. All content outside the tags is preserved as-is.
+6. **Definitive refusal**: if the user refuses on the first run, never propose again. They can activate later via the command "enable AGENTS.md write".
 
-### Format de la section AGENTS.md geree
+### Format of the managed AGENTS.md section
 
 ```markdown
 <!-- Maintained by Cowork OpenCode Agent plugin -->
@@ -142,35 +142,35 @@ Au 1er run sur un repo, en plus de la lecture obligatoire de `AGENTS.md` (orches
 <!-- end Cowork section -->
 ```
 
-### Regles de mise a jour
+### Update rules
 
-- Le champ `Observed patterns` est mis a jour apres chaque tache reussie. Les stats numeriques utilisent une moyenne glissante (pas de reset).
-- Le champ `Known antipatterns` est mis a jour quand `result-validator` detecte un echec repete (meme pattern sur >= 2 taches).
-- Les entrees sont en anglais pour la lisibilite par les LLMs qui liront le fichier.
-- Si la section grossit au-dela de 20 lignes, les entrees les plus anciennes sont retirees (FIFO). Pas de purge automatique plus agressive — c'est a l'utilisateur de nettoyer s'il le souhaite.
+- The `Observed patterns` field is updated after each successful task. Numeric stats use a rolling average (no reset).
+- The `Known antipatterns` field is updated when `result-validator` detects a repeated failure (same pattern on >= 2 tasks).
+- Entries are in English for readability by LLMs that will read the file.
+- If the section grows beyond 20 lines, the oldest entries are removed (FIFO). No more aggressive automatic purge — it's up to the user to clean up if desired.
 
 ## Inter-skill
 
-Ce skill est appele par d'autres skills du plugin et interagit avec eux de maniere bien definie :
+This skill is called by other plugin skills and interacts with them in a well-defined way:
 
-| Skill appelant | Point d'interaction |
+| Calling skill | Interaction point |
 |---|---|
-| **orchestrator** | Appelle ce skill pour le routing d'agent (choix entre build/plan/@general/cowork-with-github) et pour decider si une tache justifie l'usage de `cowork-with-github` |
-| **task-memory** | Alimente le contenu de la section `AGENTS.md` geree via ses metriques operationnelles (durees, providers, patterns) |
-| **safe-prompts** | Pas d'interaction directe — le scan de securite s'effectue en amont du routing |
-| **result-validator** | Alimente les antipatterns via ses verdicts d'echec (pattern repete = antipattern enregistre) |
-| **fallback-chain** | Pas d'interaction directe — le fallback provider est transparent pour le routing d'agent |
+| **orchestrator** | Calls this skill for agent routing (choice between build/plan/@general/cowork-with-github) and to decide if a task warrants using `cowork-with-github` |
+| **task-memory** | Feeds the content of the managed `AGENTS.md` section via its operational metrics (durations, providers, patterns) |
+| **safe-prompts** | No direct interaction — security scan happens upstream of routing |
+| **result-validator** | Feeds antipatterns via its failure verdicts (repeated pattern = recorded antipattern) |
+| **fallback-chain** | No direct interaction — provider fallback is transparent to agent routing |
 
-## Limites
+## Limitations
 
-- **Dependance MCP GitHub** : l'agent `cowork-with-github` necessite le MCP GitHub cote OpenCode. Sans ce MCP, le routing tombe en fallback `build` sans les fonctionnalites GitHub. L'utilisateur doit avoir configure l'authentification GitHub au prealable.
-- **Ecriture dans le repo utilisateur** : la section `AGENTS.md` modifie un fichier dans le repo de l'utilisateur. Le mecanisme est strictement opt-in, delimite par balises HTML, et ne declenche jamais de commit automatique. L'utilisateur garde le controle total.
-- **Pas de purge automatique agressive** : la section `AGENTS.md` utilise un FIFO simple a ~20 lignes max. Si elle grossit malgre cela, c'est a l'utilisateur de la nettoyer. Pas de suppression automatique basee sur l'age ou la pertinence.
-- **Unicite de la section** : une seule section `<!-- Maintained by Cowork ... -->` est geree par fichier. Si plusieurs instances du plugin tournent sur le meme repo, elles partagent la meme section (dernier qui ecrit gagne). Pas de merge intelligent.
+- **GitHub MCP dependency**: the `cowork-with-github` agent requires the GitHub MCP on the OpenCode side. Without this MCP, routing falls back to `build` without GitHub features. The user must have pre-configured GitHub authentication.
+- **Writing to user repo**: the `AGENTS.md` section modifies a file in the user's repo. The mechanism is strictly opt-in, delimited by HTML tags, and never triggers an automatic commit. The user retains full control.
+- **No aggressive auto-purge**: the `AGENTS.md` section uses a simple FIFO at ~20 lines max. If it grows despite this, it's up to the user to clean it. No automatic deletion based on age or relevance.
+- **Section uniqueness**: only one `<!-- Maintained by Cowork ... -->` section is managed per file. If multiple plugin instances run on the same repo, they share the same section (last writer wins). No intelligent merging.
 
 ## Inspirations
 
-- **Pattern roster d'agents** : OpenCode natif (build, plan, @general) etendus par des agents custom (cf. `swarm-code-plugin` agents/, ou Claude Code ajoute des specialisations au-dessus du modele de base)
-- **Convention AGENTS.md** : adoption native par OpenCode pour le contexte projet (cf. design doc §6.5 + §2.4), etendue ici avec une section auto-maintenue pour la memoire operationnelle cross-session
-- **Opt-in strict** : best practice Anthropic AUP — aucune ecriture silencieuse dans le repo utilisateur. Chaque modification de fichier dans l'espace de travail de l'utilisateur est precedee d'un consentement explicite.
-- **FIFO simple** : inspire des logs circulaires (pas de retention infinie, pas d'heuristique complexe de purge). L'utilisateur peut toujours nettoyer manuellement la section si besoin.
+- **Agent roster pattern**: native OpenCode (build, plan, @general) extended by custom agents (cf. `swarm-code-plugin` agents/, where Claude Code adds specializations on top of the base model)
+- **AGENTS.md convention**: natively adopted by OpenCode for project context (see design doc §6.5 + §2.4), extended here with an auto-maintained section for cross-session operational memory
+- **Strict opt-in**: Anthropic AUP best practice — no silent writing to user repo. Every file modification in the user's workspace is preceded by explicit consent.
+- **Simple FIFO**: inspired by circular logs (no infinite retention, no complex purge heuristic). The user can always manually clean the section if needed.

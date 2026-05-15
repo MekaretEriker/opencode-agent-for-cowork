@@ -5,52 +5,52 @@ description: "Use this skill to maintain operational memory across OpenCode sess
 
 # opencode-task-memory
 
-## Nature et portee
+## Nature and scope
 
-Skill instructionnel qui apprend a Cowork a maintenir une **memoire operationnelle persistante par projet** dans un fichier JSON local au workspace. Lecture en tete de tache pour calibrer les attentes (durees, providers fiables, antipatterns a eviter), ecriture en fin de tache pour accumuler l'apprentissage.
+Instructional skill that teaches Cowork to maintain a **persistent operational memory per project** in a local JSON file in the workspace. Read at task start to calibrate expectations (durations, reliable providers, antipatterns to avoid), written at task end to accumulate learning.
 
-### Distinction critique (3 couches de memoire)
+### Critical distinction (3 memory layers)
 
-Tu ne melanges pas ces couches :
+Do not mix these layers:
 
-- **Memoire OPERATIONNELLE** (ce skill) = stats techniques par projet, patterns d'execution observes
-- **Memoire UTILISATEUR** (gere par `consolidate-memory` natif Cowork) = preferences, style de travail, relations
-- **Contexte PROJET** (AGENTS.md, lu par OpenCode) = conventions de code, spec architecture
+- **OPERATIONAL memory** (this skill) = technical stats per project, observed execution patterns
+- **USER memory** (managed by native Cowork `consolidate-memory`) = preferences, work style, relationships
+- **PROJECT context** (AGENTS.md, read by OpenCode) = code conventions, architecture spec
 
-Ce skill couvre uniquement la premiere couche. Ne pas y mettre de prefs utilisateur ou de spec.
+This skill covers only the first layer. Do not put user preferences or specs in it.
 
-## Composabilite avec MCPs utilisateur
+## Composability with user MCPs
 
-Si l'utilisateur dispose d'un MCP exposant un systeme d'ADR (Architecture Decision Records) — typiquement un vault Relkhon-style avec `manage_adr`, ou un outil custom de docs — c'est lui qui doit servir de memoire de reference pour les decisions architecturales du projet.
+If the user has an MCP exposing an ADR (Architecture Decision Records) system — typically a Relkhon-style vault with `manage_adr`, or a custom docs tool — that MCP should serve as the reference memory for the project's architectural decisions.
 
-Ce skill ne couvre que les stats techniques d'execution, pas les decisions architecturales ou apprentissages metier.
+This skill only covers technical execution stats, not architectural decisions or domain learning.
 
-Au 1er run sur un projet, si un MCP user-side avec `manage_adr` ou equivalent est detecte, propose a l'utilisateur :
-- (a) desactiver task-memory au profit du MCP user (qui couvre deja une partie)
-- (b) chainer les deux (task-memory pour stats brutes, MCP user pour decisions de fond)
-- (c) garder seulement task-memory
+On the first run on a project, if a user-side MCP with `manage_adr` or equivalent is detected, offer the user:
+- (a) disable task-memory in favor of the user MCP (which already covers part of it)
+- (b) chain both (task-memory for raw stats, user MCP for foundational decisions)
+- (c) keep only task-memory
 
-## Localisation du fichier
+## File location
 
 `<workspace>/.opencode-agent-memory.json`
 
-Ou `<workspace>` est le dossier du repo de travail (equivalent du `directory` passe a OpenCode).
+Where `<workspace>` is the working repo folder (equivalent of the `directory` passed to OpenCode).
 
-### Premier run : proposer .gitignore
+### First run: propose .gitignore
 
-Si le projet a un `.git/`, propose a l'utilisateur d'ajouter `.opencode-agent-memory.json` au `.gitignore` :
+If the project has a `.git/`, offer to add `.opencode-agent-memory.json` to `.gitignore`:
 
-> "Je vais maintenir un fichier `.opencode-agent-memory.json` a la racine de ton projet pour apprendre tes patterns (durees, providers fiables, etc.). Je te recommande de l'ajouter au `.gitignore` pour ne pas le commiter par erreur. Tu veux que je le fasse ?"
+> "I'll maintain a `.opencode-agent-memory.json` file at your project root to learn your patterns (durations, reliable providers, etc.). I recommend adding it to `.gitignore` to avoid accidental commits. Want me to do that?"
 
-Si oui, ajoute la ligne au `.gitignore`. Pas d'opt-out cache — l'utilisateur sait que tu ecris dans son repo.
+If yes, add the line to `.gitignore`. No hidden opt-out — the user knows you're writing to their repo.
 
-### Si le projet est en lecture seule
+### If the project is read-only
 
-Si l'ecriture echoue (repo en lecture seule, sandbox CI), opere en mode in-memory pour la session courante et previens l'utilisateur :
+If writing fails (read-only repo, CI sandbox), operate in in-memory mode for the current session and warn the user:
 
-> "Je n'arrive pas a ecrire `.opencode-agent-memory.json` (workspace en lecture seule). Je garde la memoire en interne pour cette conversation, mais elle sera perdue au prochain demarrage."
+> "I can't write `.opencode-agent-memory.json` (workspace is read-only). I'll keep the memory in-session, but it will be lost on next startup."
 
-## Schema JSON
+## JSON schema
 
 ```json
 {
@@ -90,89 +90,89 @@ Si l'ecriture echoue (repo en lecture seule, sandbox CI), opere en mode in-memor
     "openrouter": { "calls": 12, "successRate": 0.83 }
   },
   "patterns": [
-    "Taches sur le module factions : ~5 min, necessite verif croisee avec specs/combat.md",
-    "Bugs UI Godot : ~1-2 min, regarder _ready() et _process() en priorite"
+    "Tasks on the factions module: ~5 min, requires cross-check with specs/combat.md",
+    "Godot UI bugs: ~1-2 min, check _ready() and _process() first"
   ],
   "antipatterns": [
-    "Refactor cross-systemes sans plan explicite -> contradictions specs 3 fois sur 4",
-    "Implementer sans valider via LightRAG -> bug remonte en QA 2 fois"
+    "Cross-system refactor without explicit plan -> spec contradictions 3 out of 4 times",
+    "Implementing without LightRAG validation -> bug surfaced in QA twice"
   ]
 }
 ```
 
-## Quand lire la memoire
+## When to read memory
 
-En tete de chaque tache OpenCode sur un projet :
+At the start of each OpenCode task on a project:
 
-1. Verifier si `<workspace>/.opencode-agent-memory.json` existe
-2. Si oui, parser le JSON et utiliser pour :
-   - **Calibrer `maxDurationSeconds`** : si la tache ressemble a `feature_implementation` et `byType.feature_implementation.avgDurationSec` = 240, propose `maxDurationSeconds: 300` (avec marge ~25%)
-   - **Choisir le provider initial** : si `providerStats.anthropic.successRate` > `providerStats.openrouter.successRate`, defaut Anthropic
-   - **Mentionner les antipatterns dans le ReAct** : "A noter, sur ce projet, [antipattern]. Je vais [strategie pour eviter]"
-   - **Referencer les patterns** : "D'apres les sessions passees, [pattern]. Je suis cette approche."
-3. Si non, demarrer en mode neutre (defauts du skill orchestrator)
+1. Check if `<workspace>/.opencode-agent-memory.json` exists
+2. If yes, parse the JSON and use it to:
+   - **Calibrate `maxDurationSeconds`**: if the task resembles `feature_implementation` and `byType.feature_implementation.avgDurationSec` = 240, propose `maxDurationSeconds: 300` (with ~25% margin)
+   - **Choose the initial provider**: if `providerStats.anthropic.successRate` > `providerStats.openrouter.successRate`, default to Anthropic
+   - **Mention antipatterns in the ReAct**: "Note: on this project, [antipattern]. I'll [strategy to avoid it]"
+   - **Reference patterns**: "Based on past sessions, [pattern]. I'm following this approach."
+3. If not, start in neutral mode (orchestrator skill defaults)
 
-## Quand ecrire la memoire
+## When to write memory
 
-En fin de tache OpenCode (apres `opencode_check` montre status `idle`/`finished`, ou apres une recuperation de session orpheline) :
+At the end of an OpenCode task (after `opencode_check` shows status `idle`/`finished`, or after an orphaned session recovery):
 
-1. Determiner le type de tache via heuristique sur le prompt initial :
-   - "implemente", "ajoute" -> `feature_implementation`
-   - "fix", "corrige", "bug" -> `bug_fix`
-   - "refactor", "restructure", "ameliore" -> `refactor`
-   - "explique", "trouve", "analyse" -> `exploration`
-   - Sinon -> `other`
-2. Mettre a jour les stats :
-   - Incrementer `tasksTotal` et `byType.<type>.count`
-   - Recalculer `avgDurationSec` (moyenne courante : `newAvg = (oldAvg * (count-1) + thisDuration) / count`)
-   - Mettre a jour `successRate` (binaire succes/echec selon le resultat)
-3. Mettre a jour `providerStats` pour le provider utilise
-4. Si nouvelle lecon apprise (pattern qui marche, antipattern observe), AJOUTER a `patterns` ou `antipatterns`
-5. Mettre a jour `lastUpdated`
-6. Sauvegarder le JSON
+1. Determine the task type via heuristic on the initial prompt:
+   - "implement", "add", "implemente", "ajoute" -> `feature_implementation`
+   - "fix", "correct", "bug", "corrige" -> `bug_fix`
+   - "refactor", "restructure", "improve", "ameliore" -> `refactor`
+   - "explain", "find", "analyse", "explique", "trouve" -> `exploration`
+   - Otherwise -> `other`
+2. Update the stats:
+   - Increment `tasksTotal` and `byType.<type>.count`
+   - Recalculate `avgDurationSec` (running average: `newAvg = (oldAvg * (count-1) + thisDuration) / count`)
+   - Update `successRate` (binary success/failure based on the result)
+3. Update `providerStats` for the provider used
+4. If a new lesson was learned (working pattern, observed antipattern), ADD to `patterns` or `antipatterns`
+5. Update `lastUpdated`
+6. Save the JSON
 
-### Gestion du debordement
+### Overflow management
 
-- `patterns` et `antipatterns` : max 20 entrees chacune, FIFO (eject les plus anciennes)
-- Le fichier ne devrait jamais depasser ~50KB. Si oui, prune plus aggressivement (garder 10 + 10).
+- `patterns` and `antipatterns`: max 20 entries each, FIFO (eject oldest)
+- The file should never exceed ~50KB. If it does, prune more aggressively (keep 10 + 10).
 
-## Format de presentation a l'utilisateur
+## User-facing format
 
-### Au debut d'une tache (mode standard)
+### At task start (standard mode)
 
-Si tu utilises la memoire pour calibrer, mentionne-le brievement :
+If you use memory to calibrate, mention it briefly:
 
-> "D'apres les sessions passees sur ce projet (47 taches), les features prennent ~4 min en moyenne et Anthropic est fiable a 94%. Je dispatche avec ces parametres."
+> "Based on past sessions on this project (47 tasks), features take ~4 min on average and Anthropic is reliable at 94%. Dispatching with these parameters."
 
-### En fin de tache
+### At task end
 
-Silencieux par defaut. Sauf si :
-- Tu ajoutes un pattern/antipattern nouveau : "J'ai note que [observation]. Ca enrichit la memoire operationnelle du projet."
-- L'utilisateur demande a voir la memoire : tu peux montrer le JSON ou son resume.
+Silent by default. Except when:
+- You add a new pattern/antipattern: "I noted that [observation]. This enriches the project's operational memory."
+- The user asks to see the memory: you can show the JSON or a summary.
 
-### Mode dev override (voir memoire complete)
+### Dev mode override (view full memory)
 
-Si l'utilisateur demande "montre la memoire" ou "task-memory status" :
+If the user asks "show memory" or "task-memory status":
 
-> "Memoire operationnelle de ce projet : 47 taches au total, 28 features (avg 4min, 89% succes), 12 fix (avg 1m30, 92%), 7 refactors (avg 5min, 71%). Provider anthropic a 94%. 3 patterns appris, 2 antipatterns notes."
+> "Operational memory for this project: 47 tasks total, 28 features (avg 4min, 89% success), 12 fixes (avg 1m30, 92%), 7 refactors (avg 5min, 71%). Anthropic provider at 94%. 3 learned patterns, 2 noted antipatterns."
 
-## Inter-fonctionnement avec d'autres skills
+## Inter-skill interactions
 
-- **orchestrator** : appele en premier, decide quoi dispatcher. Lit la memoire pour calibrer maxDurationSeconds et choisir provider.
-- **safe-prompts** (v0.2.0) : scan avant dispatch, ne lit pas la memoire.
-- **result-validator** (v1.3 a venir) : valide apres dispatch, ecrit dans la memoire si validation echoue (antipattern observe).
+- **orchestrator**: called first, decides what to dispatch. Reads memory to calibrate maxDurationSeconds and choose provider.
+- **safe-prompts** (v0.2.0): scans before dispatch, does not read memory.
+- **result-validator** (v1.3 upcoming): validates after dispatch, writes to memory if validation fails (observed antipattern).
 
-## Limites assumees
+## Known limitations
 
-- La memoire est par PROJET (chemin du repo), pas globale. Si tu changes de projet, la memoire ne suit pas.
-- Pas de cross-machine sync — le fichier vit dans le workspace local.
-- Pas de versioning ou rollback. Si corrompu, supprimer pour repartir a zero.
-- Pas de purge automatique des tres vieux patterns (>6 mois) en v1.2. A voir si pertinent en v1.x.
-- Le calcul de duree dans `avgDurationSec` peut etre fausse si tu changes de modele/provider entre les sessions — c'est une moyenne brute, pas une comparaison rigoureuse.
+- Memory is per PROJECT (repo path), not global. If you switch projects, memory doesn't follow.
+- No cross-machine sync — the file lives in the local workspace.
+- No versioning or rollback. If corrupted, delete to start fresh.
+- No automatic purge of very old patterns (>6 months) in v1.2. To be evaluated in v1.x.
+- Duration calculation in `avgDurationSec` may be skewed if you change model/provider between sessions — it's a raw average, not a rigorous comparison.
 
 ## Inspirations
 
-- Schema schema : design doc §5.2 (notre propre design)
-- Distinction "memoire operationnelle vs user vs spec" : audit consolidate-memory Cowork natif (notre Q1)
-- Composabilite avec MCP user (manage_adr style) : §13.5 du design doc
-- Pattern de logging persistant : trajectoires d'agent (§11.4 traces JSONL — task-memory est la version resumee, traces sont la version brute non encore implementee)
+- JSON schema: design doc §5.2 (our own design)
+- "Operational vs user vs spec memory" distinction: native Cowork consolidate-memory audit (our Q1)
+- Composability with user MCP (manage_adr style): design doc §13.5
+- Persistent logging pattern: agent trajectories (§11.4 JSONL traces — task-memory is the summarized version, traces are the raw version not yet implemented)
