@@ -2,9 +2,17 @@
 
 > Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
 
-**Statut** : v0.4.0 — MVP + patch timeout + safe-prompts + task-memory + result-validator. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.4 -> v1.7.
+**Statut** : v0.5.0 — MVP + patch timeout + safe-prompts + task-memory + result-validator + fallback-chain. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.5 -> v1.7.
 
 ## Changelog
+
+### v0.5.0 (skill fallback-chain)
+
+- Nouveau skill `opencode-fallback-chain` : retry automatique avec provider suivant en cas de 429/5xx
+- Chaine par defaut anthropic -> openrouter -> openai (override via env `OPENCODE_AGENT_PROVIDER_CHAIN`)
+- Max 3 tentatives, backoff 5s entre chaque
+- Inter-skill avec task-memory : `providerStats.failureCount` mis a jour
+- Composable avec MCPs utilisateur (gateway custom) cf. §6.2.2
 
 ### v0.4.0 (skill result-validator)
 
@@ -124,7 +132,7 @@ Le plugin est en MVP. Beaucoup de capacités sont à venir incrémentalement :
 | `safe-prompts` (advisor sur patterns dangereux) | v1.1 | À venir |
 | `task-memory` (mémoire persistante par projet) | v1.2 | À venir |
 | `result-validator` (validation Reflect post-exécution) | v1.3 | À venir |
-| `fallback-chain` (retry provider sur 429/5xx) | v1.4 | À venir |
+| `fallback-chain` (retry provider sur 429/5xx) | v0.5.0 | ✅ Fait |
 | `agent-roster` (`cowork-with-github`) + écriture AGENTS.md | v1.5 | À venir |
 | Scheduled tasks (digests, audits, scans) | v1.6 | À venir |
 | Composabilité MCPs utilisateur (RAG, validators, ADR) | v1.7 | À venir |
