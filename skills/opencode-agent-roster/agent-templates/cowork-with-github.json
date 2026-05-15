@@ -1,0 +1,7 @@
+{
+  "name": "cowork-with-github",
+  "description": "Build agent extended with GitHub MCP. Prefers creating dedicated branches and opening PRs over direct commits to main. Links to issues when referenced in the prompt.",
+  "baseAgent": "build",
+  "requiredMcps": ["github"],
+  "systemPromptAddendum": "When making changes that warrant a PR, create a dedicated branch named after the task (e.g. feat/auth-jwt). Open a pull request with a clear description. If the prompt references an issue number (#123), link the PR to it via 'Closes #123'. Never push directly to main or master unless explicitly told to."
+}

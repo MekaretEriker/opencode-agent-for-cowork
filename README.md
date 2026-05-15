@@ -2,9 +2,17 @@
 
 > Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
 
-**Statut** : v0.5.0 — MVP + patch timeout + safe-prompts + task-memory + result-validator + fallback-chain. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.5 -> v1.7.
+**Statut** : v0.6.0 — MVP + 5 skills Full + agent-roster + AGENTS.md write. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.6 -> v1.7.
 
 ## Changelog
+
+### v0.6.0 (agent-roster + AGENTS.md write)
+
+- Nouveau skill `opencode-agent-roster` : utilise build/plan natifs OpenCode + livre l'agent custom `cowork-with-github` (extension build + GitHub MCP)
+- Template `agent-templates/cowork-with-github.json` pour install cote OpenCode au 1er run (opt-in)
+- Ecriture AGENTS.md opt-in par projet avec section delimitee par balises HTML
+- Stockage de l'opt-in dans `.opencode-agent-memory.json` (champ `agentsMdWriteEnabled`)
+- Aucune ecriture silencieuse dans le repo utilisateur
 
 ### v0.5.0 (skill fallback-chain)
 
@@ -133,7 +141,7 @@ Le plugin est en MVP. Beaucoup de capacités sont à venir incrémentalement :
 | `task-memory` (mémoire persistante par projet) | v1.2 | À venir |
 | `result-validator` (validation Reflect post-exécution) | v1.3 | À venir |
 | `fallback-chain` (retry provider sur 429/5xx) | v0.5.0 | ✅ Fait |
-| `agent-roster` (`cowork-with-github`) + écriture AGENTS.md | v1.5 | À venir |
+| `agent-roster` (`cowork-with-github`) + écriture AGENTS.md | v0.6.0 | ✅ Fait |
 | Scheduled tasks (digests, audits, scans) | v1.6 | À venir |
 | Composabilité MCPs utilisateur (RAG, validators, ADR) | v1.7 | À venir |
 
