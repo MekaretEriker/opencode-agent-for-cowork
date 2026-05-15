@@ -1,0 +1,9 @@
+{
+  "name": "daily-repo-digest",
+  "description": "Daily digest of git commits in the last 24h with summary of changes per module",
+  "schedule": "0 7 * * *",
+  "prompt": "OpenCode, analyse les commits git des dernieres 24h dans ce repo. Pour chaque module touche, donne un resume en 1 phrase de ce qui a change. Format: liste markdown groupee par module. Ne modifie rien, juste rapporte.",
+  "agent": "plan",
+  "maxDurationSeconds": 180,
+  "notifyOnComplete": true
+}

@@ -1,0 +1,9 @@
+{
+  "name": "weekly-deps-audit",
+  "description": "Weekly audit of outdated dependencies and CVEs",
+  "schedule": "0 9 * * 1",
+  "prompt": "OpenCode, liste les dependances obsoletes (npm outdated, pip list --outdated, cargo outdated selon la tech) et celles avec des CVE connues. Genere un rapport markdown dans reports/deps-audit-$(date +%F).md avec : (1) deps obsoletes, (2) CVE critiques, (3) recommandation de mise a jour prioritaire. Ne fais PAS les updates, juste le rapport.",
+  "agent": "build",
+  "maxDurationSeconds": 600,
+  "notifyOnComplete": true
+}

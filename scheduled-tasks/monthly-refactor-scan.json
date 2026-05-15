@@ -1,0 +1,9 @@
+{
+  "name": "monthly-refactor-scan",
+  "description": "Monthly scan for code that would benefit from refactoring",
+  "schedule": "0 9 1 * *",
+  "prompt": "OpenCode, identifie 3 zones du code qui beneficieraient d'un refactor (code smells, duplication, complexite cyclomatique elevee, dette technique visible). Pour chaque zone : (1) chemin du fichier, (2) probleme identifie, (3) suggestion de refactor. Format markdown. Ne refactor PAS, juste recommande.",
+  "agent": "plan",
+  "maxDurationSeconds": 600,
+  "notifyOnComplete": true
+}

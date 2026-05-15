@@ -2,9 +2,16 @@
 
 > Plugin Cowork qui transforme Cowork en orchestrateur d'OpenCode ([anomalyco/opencode](https://github.com/anomalyco/opencode)).
 
-**Statut** : v0.6.0 — MVP + 5 skills Full + agent-roster + AGENTS.md write. Voir le projet Linear "OpenCode Agent for Cowork" pour la roadmap v1.6 -> v1.7.
+**Statut** : v0.7.0 — Full scope complete sauf MCP discovery (v1.7 a venir).
 
 ## Changelog
+
+### v0.7.0 (scheduled tasks)
+
+- 3 scheduled-tasks bundlees : `daily-repo-digest`, `weekly-deps-audit`, `monthly-refactor-scan`
+- Skill documentaire `opencode-scheduled-recipes` qui explique l'activation et la customisation
+- Integration avec le mecanisme natif Cowork `mcp__scheduled-tasks__*`
+- Recettes non actives par defaut : opt-in explicite par l'utilisateur
 
 ### v0.6.0 (agent-roster + AGENTS.md write)
 
