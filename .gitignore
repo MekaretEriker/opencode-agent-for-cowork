@@ -14,3 +14,4 @@ Thumbs.db
 # Local memory (user workspace files, never committed at plugin level)
 .opencode-agent-memory.json
 .opencode-agent-traces/
+*.plugin
