@@ -303,7 +303,31 @@ Precedent: [swarm-code-plugin](https://github.com/apoapps/swarm-code-plugin) (Cl
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 Mekaret.
+MIT — see [LICENSE](LICENSE).
+
+## Related projects
+
+Other orchestration approaches in the OpenCode ecosystem:
+
+| Project | Layer | Approach |
+|---|---|---|
+| **This plugin** | Cowork-side | Skills inside Cowork tell Claude how to delegate to OpenCode. Single OpenCode `build`/`plan` agent per task. |
+| [tempont/small-opencode-orchestrator](https://github.com/tempont/small-opencode-orchestrator) | **OpenCode-side** | Native OpenCode config with ~10 custom agents (`orchestrator`, `plan-runner`, `code-executor`, `code-explorer`, reviewers…). Model tiering per role (strong models for orchestrator, cheap models for subagents). Plans persisted to disk with explicit approval gates. |
+| [apoapps/swarm-code-plugin](https://github.com/apoapps/swarm-code-plugin) | Claude Code-side | Claude Code orchestrates OpenCode as a worker via tmux pipe-pane + keyword watcher. ~80% token savings reported. |
+
+These are **complementary, not competing**. In theory, you can compose:
+
+```
+Cowork (this plugin) ─► OpenCode (tempont config) ─► subagents (tempont)
+       ↓                          ↓                            ↓
+  decides what to            decides how to              executes plan,
+  delegate (build/plan,      execute (orchestrator       reviews, tests
+  parallel, when to fire)    → plan-runner →
+                             code-executor →
+                             reviewers)
+```
+
+Three levels of orchestration — overkill for most cases, but theoretically powerful for large/critical projects. Pick the layer that matches your workflow.
 
 ## Credits
 
