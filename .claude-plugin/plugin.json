@@ -1,6 +1,6 @@
 {
   "name": "opencode-agent",
-  "version": "1.0.1",
-  "description": "Delegate coding tasks to OpenCode from Cowork via opencode-mcp orchestration",
-  "author": { "name": "Mekaret" }
+  "version": "1.0.3",
+  "description": "Delegate coding tasks to OpenCode from Cowork via @mekareteriker/opencode-mcp (hardened fork with Windows path fix)",
+  "author": { "name": "MekaretEriker" }
 }

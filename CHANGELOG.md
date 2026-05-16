@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-05-16
+
+### Changed
+- `skills/opencode-orchestrator/SKILL.md`: section "Workaround - opencode-mcp directory parameter" replaced by "Directory parameter — resolved via @mekareteriker/opencode-mcp fork". The `cd $path && …` instruction is no longer the active behavior; it stays only as a fallback note for users who force the plugin onto upstream `opencode-mcp <= 1.10.1`.
+- `DESIGN-opencode-agent-for-cowork.md` §10 R9 (in the parent project repo): status updated from "open, mitigation skill" to "✅ resolved via fork on 2026-05-16".
+
+## [1.0.2] - 2026-05-16
+
+### Changed
+- `.mcp.json` now uses `@mekareteriker/opencode-mcp@^1.10.2-mekareteriker.0` (hardened fork) instead of upstream `opencode-mcp@^1.10.1`. Resolves R9 — the `directory` parameter no longer rejects valid absolute paths on Windows. See [@mekareteriker/opencode-mcp on npm](https://www.npmjs.com/package/@mekareteriker/opencode-mcp) and `D:\Projects\opencode-mcp\SPEC-fork.md` for full audit trail.
+
 ## [1.0.1] - 2026-05-15
 
 ### Changed

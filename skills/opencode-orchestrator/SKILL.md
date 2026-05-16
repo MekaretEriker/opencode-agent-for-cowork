@@ -444,22 +444,10 @@ You don't impose dev mode — it's progressive disclosure. You start in standard
 
 ## Technical notes
 
-### Workaround - opencode-mcp directory parameter
+### Directory parameter — resolved via @mekareteriker/opencode-mcp fork
 
-WARNING: Bug observed (at least versions 1.10.x): passing the directory parameter to opencode_run / opencode_ask / opencode_fire with a valid absolute path may produce:
+The `directory` parameter works natively on Windows clients as of `@mekareteriker/opencode-mcp >= 1.10.2-mekareteriker.0` (the hardened fork bundled with this plugin). Pass absolute paths like `D:\Projects\myproject` or `/mnt/d/Projects/myproject` directly — both forms are accepted.
 
-Error: Invalid directory: "/valid/absolute/path" is not an absolute path.
+Previous workaround (no longer needed): on upstream `opencode-mcp <= 1.10.1`, the validator required the resolved path to start with `"/"`, rejecting Windows absolute paths with "is not an absolute path". The fork switched to platform-aware `path.isAbsolute` (upstream commit `e8e6cfe`, never released on the upstream npm). If you are forced to run on the upstream package (e.g. via a custom MCP config), prepend the prompt with `cd /path && ` as a fallback.
 
-This is a false positive on the opencode-mcp validation side.
-
-Behavior to apply: if the directory parameter is rejected with this message, DO NOT pass it at all. Instead, prefix the prompt with "cd /absolute/path && " so that OpenCode resolves the context via the shell.
-
-Examples:
-
-What works:
-opencode_run with prompt "cd /mnt/d/Projects/myproject && analyse the auth module" and agent "build".
-
-To avoid while the bug is present:
-opencode_run with prompt "analyse the auth module", directory "/mnt/d/Projects/myproject" (rejected), agent "build".
-
-Remove this section when the upstream bug is fixed. Track the opencode-mcp version that fixes it here: (pending).
+Reference: `D:\Projects\opencode-mcp\SPEC-fork.md` for the full audit trail and the patch plan.
