@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-05-17
+
+### Changed
+
+- `.mcp.json` now requires `@mekareteriker/opencode-mcp@^1.11.2-mekareteriker.0` (was `^1.11.1-mekareteriker.0`). Picks up the **MEK-295 hotfix** for `opencode_run_streaming`: v1.11.1 (MEK-294) had fixed the broken `/prompt` endpoint by switching to `/message`, but `/message` is synchronous (blocks until the agent loop completes) — the SSE subscription in `workflow.ts` was opened AFTER the await, systematically missing `session.idle`. Sessions executed correctly (assistant message non-empty, cost recorded) but the tool returned `SESSION_HANG`. v1.11.2 switches to `/prompt_async` (canonical async endpoint, returns 204 immediately, emits SSE events) and reorders the subscription to happen BEFORE the POST — the canonical pattern from the official `@opencode-ai/sdk`. Without this bump, `opencode_run_streaming` returns `SESSION_HANG` despite the LLM actually executing. See [opencode-mcp v1.11.2-mekareteriker.0 release](https://github.com/MekaretEriker/opencode-mcp/releases/tag/v1.11.2-mekareteriker.0).
+
 ## [1.1.1] - 2026-05-17
 
 ### Changed
