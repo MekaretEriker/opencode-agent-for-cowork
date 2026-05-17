@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-05-17
+
+### Changed
+
+- `.mcp.json` now requires `@mekareteriker/opencode-mcp@^1.11.0-mekareteriker.0` (was `^1.10.2-mekareteriker.0`). The previous range did not match `1.11.0` due to npm's strict caret-semver-with-prerelease rules. The upstream fork release bundles MEK-282 (structured error codes), MEK-283 (new `opencode_run_streaming` tool), MEK-284 (idempotency dedup for POST/PUT/PATCH), MEK-289 (WSL/Windows path translation). See [opencode-mcp v1.11.0-mekareteriker.0 release](https://github.com/MekaretEriker/opencode-mcp/releases/tag/v1.11.0-mekareteriker.0).
+
+### Added
+
+- `skills/opencode-orchestrator/SKILL.md`: new subsection **`opencode_run_streaming` — SSE-driven synchronous task**, positioned between `opencode_run` and `opencode_fire`. Documents when to prefer the streaming variant (60-180s tasks where the user is actively waiting and would benefit from live progress) and clarifies the ~180s MCP transport timeout still applies. New row added to the recap table. Orphaned-session recovery section now mentions the new `SESSION_HANG` structured error code distinct from the Cowork-side MCP timeout.
+- `skills/opencode-fallback-chain/SKILL.md`: new section **Structured error codes (opencode-mcp 1.11.0+)** documenting how to parse the `<!-- structured-error -->` JSON block to decide on fallback. Maps each code (`RATE_LIMITED`, `PROVIDER_ERROR`, `AUTH_FAILED`, `TIMEOUT`, `SESSION_HANG`, `EMPTY_RESPONSE`) to a fallback decision. Regex fallback on message preserved for older opencode-mcp versions.
+- `skills/opencode-safe-prompts/SKILL.md`: `opencode_run_streaming` added to the list of dispatch tools scanned for risky patterns (frontmatter description + body). Closes a latent security gap where a user could have bypassed the safety scan by using the new streaming tool.
+- `skills/opencode-result-validator/SKILL.md`: `opencode_run_streaming` added as a valid trigger alongside `opencode_run` and the `opencode_check` phase following `opencode_fire`.
+
 ## [1.0.3] - 2026-05-16
 
 ### Changed

@@ -38,6 +38,39 @@ Do **not** retry on client error codes:
 
 When in doubt about the nature of the error (ambiguous message that could be a disguised 5xx), apply the precautionary principle and attempt the fallback — a useless retry is less costly than a premature abort.
 
+
+## Structured error codes (opencode-mcp 1.11.0+)
+
+Since opencode-mcp 1.11.0 (MEK-282), every error response from a tool includes both a human-readable line **and** a machine-parsable JSON block embedded in an HTML comment:
+
+```
+Error [RATE_LIMITED]: Rate limit exceeded (HTTP 429)
+
+**Suggestion:** Wait and retry, or switch provider/model
+
+<!-- structured-error
+{
+  "code": "RATE_LIMITED",
+  "message": "Rate limit exceeded",
+  "raw": { "httpStatus": 429, "body": "..." },
+  "provider": "anthropic",
+  "modelIdRequested": "claude-opus-4-6",
+  "sessionId": "ses_xxx",
+  "suggestedAction": "Wait and retry, or switch provider/model"
+}
+-->
+```
+
+When this JSON block is present, **prefer parsing it over regex-matching the error message** — codes are stable across locale and wording changes. Mapping for fallback decisions:
+
+- `RATE_LIMITED` -> trigger fallback (chain to next provider)
+- `PROVIDER_ERROR` with `raw.httpStatus >= 500` -> trigger fallback
+- `AUTH_FAILED` -> **do not fallback** (re-auth needed, not a provider problem)
+- `TIMEOUT` or `SESSION_HANG` -> orchestrator's responsibility (orphaned-session recovery), not this skill
+- `EMPTY_RESPONSE` -> trigger fallback (degenerate model output)
+
+Regex matching on the human-readable line remains as a safe fallback for any error without a structured block (older opencode-mcp versions or non-wrapped tool errors).
+
 ## Default chain
 
 If no chain is explicitly configured by the user, the default chain is:

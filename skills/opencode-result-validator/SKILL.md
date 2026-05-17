@@ -7,7 +7,7 @@ description: "Use this skill after an OpenCode task with the build agent reports
 
 ## Nature and scope
 
-Instructional skill that activates **after** an OpenCode session (typically `opencode_run` or the `opencode_check` phase following `opencode_fire`) reports "completed" on a modification task. Before declaring success to the user, you systematically validate that the result holds up.
+Instructional skill that activates **after** an OpenCode session (typically `opencode_run`, `opencode_run_streaming`, or the `opencode_check` phase following `opencode_fire`) reports "completed" on a modification task. Before declaring success to the user, you systematically validate that the result holds up.
 
 This is the **3rd step of the Plan-Execute-Reflect pattern** (see design doc §13.1 and original §5.6). OpenCode's native `plan` agent handles the "Plan" for exploratory tasks. The `build` agent handles the "Execute". This skill handles the "Reflect".
 
@@ -31,7 +31,7 @@ See design doc §6.2.2.
 
 Always activate after:
 
-- `opencode_run` or `opencode_check` showing `idle/finished` on a `build` agent task
+- `opencode_run` / `opencode_run_streaming` or `opencode_check` showing `idle/finished` on a `build` agent task
 - Recovery of an orphaned session (see orchestrator §2)
 - Any task whose initial prompt was `feature_implementation`, `bug_fix`, or `refactor`
 

@@ -7,7 +7,7 @@ description: "Use this skill before dispatching any prompt to OpenCode that invo
 
 ## Nature and scope
 
-This skill is an **advisor** on the Cowork side. Before dispatching a prompt to OpenCode via `opencode_run` / `opencode_ask` / `opencode_fire`, you scan the prompt (and any reformulation you made) for risky patterns. If you detect any, you **clearly announce it to the user** and ask for explicit confirmation.
+This skill is an **advisor** on the Cowork side. Before dispatching a prompt to OpenCode via `opencode_run` / `opencode_run_streaming` / `opencode_ask` / `opencode_fire`, you scan the prompt (and any reformulation you made) for risky patterns. If you detect any, you **clearly announce it to the user** and ask for explicit confirmation.
 
 **This is NOT a firewall.** You do not block automatically. You inform and let the user decide. Final responsibility remains with the user. Consistent with design doc decision Q5 (layered safety: opencode-mcp `permission: allow` + agent `plan` + safe-prompts advisor).
 

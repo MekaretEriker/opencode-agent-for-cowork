@@ -85,6 +85,28 @@ maxDurationSeconds parameter to adjust:
 
 Example: "Fix the authentication bug in login.ts" → opencode_run with maxDurationSeconds 180.
 
+### opencode_run_streaming - SSE-driven synchronous task (new in v1.1)
+
+Available since opencode-mcp 1.11.0 (MEK-283). Functionally equivalent to `opencode_run` but consumes the OpenCode server's `text/event-stream` instead of polling `/session/{id}` every 3s. Two advantages over `opencode_run`:
+
+- **One persistent connection** instead of N roundtrips — measurably lighter on the MCP transport, especially for tasks in the 60-180s range.
+- **Live progress** in Cowork if it forwards a `progressToken` in the call params (per MCP progress spec). Each intermediate event (`tool.start`, `tool.end`, `message.update`) is forwarded as `notifications/progress`. If no `progressToken` is provided, the tool behaves like a silent `opencode_run` — fully backward compatible.
+
+When to prefer `opencode_run_streaming` over `opencode_run`:
+
+- The user is actively waiting and would benefit from seeing progress
+- Task estimated 60-180s (long enough for progress to matter, short enough to stay below the MCP transport timeout)
+- You want a structured `SESSION_HANG` error code on timeout instead of a generic "Request timed out"
+
+When `opencode_run` is still fine:
+
+- Very short task (under 30-60s) where progress overhead isn't worth it
+- The client (e.g. an automated dispatch) doesn't display progress notifications
+
+`opencode_run_streaming` is still subject to the same ~180s MCP transport timeout as `opencode_run`. For tasks over 3 min, use `opencode_fire` regardless.
+
+Example: "Refactor login.ts to use the new auth module" (estimate 90s, user waiting) -> `opencode_run_streaming` with maxDurationSeconds 180.
+
 ### opencode_fire - fire-and-forget (background) - PREFERRED DEFAULT for 3+ min
 
 When to use:
@@ -105,7 +127,9 @@ Example: "Refactor the factions module to use EventBus" → opencode_fire (estim
 
 ### Orphaned session recovery (MCP timeout)
 
-If you launched opencode_run and receive an MCP timeout error (e.g., "Request timed out after Xs" or "MCP server disconnected"), DO NOT ASSUME the task failed on OpenCode's side. The OpenCode server often keeps running.
+If you launched opencode_run or opencode_run_streaming and receive an MCP timeout error (e.g., "Request timed out after Xs" or "MCP server disconnected"), DO NOT ASSUME the task failed on OpenCode's side. The OpenCode server often keeps running.
+
+Note on structured errors: as of opencode-mcp 1.11.0, `opencode_run_streaming` returns a structured `SESSION_HANG` code (parseable from the `<!-- structured-error -->` JSON block in the error message) when its own SSE timeout fires without seeing `session.idle`. This is distinct from the Cowork-side MCP transport timeout described above. If you see `SESSION_HANG`, the session is still alive on the server but failed to emit `session.idle` — the recovery procedure below applies regardless.
 
 Procedure:
 
@@ -126,6 +150,7 @@ Announce to user (ReAct): "The MCP tool has an internal timeout of ~180s. The ta
 |---|---|---|
 | Question under 30s | opencode_ask | No session to maintain |
 | Task under 2-3 min, synchronous | opencode_run with maxDur 120-180 | Wait included, below MCP timeout threshold (180s) |
+| Task under 2-3 min, user actively waiting | opencode_run_streaming with maxDur 120-180 | Same as _run but emits live progress + structured SESSION_HANG on timeout |
 | Task over 3 min OR parallel | opencode_fire + check next turn | Avoids MCP timeout, preferred default |
 | MCP timeout received on opencode_run | sessions_overview + check (recover orphan) | Don't re-launch a running task |
 | Follow-up on a _run task | opencode_reply | Continues the existing session |
