@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-05-17
+
+### Changed
+
+- `.mcp.json` now requires `@mekareteriker/opencode-mcp@^1.11.1-mekareteriker.0` (was `^1.11.0-mekareteriker.0`). Picks up the **MEK-294 hotfix** for `opencode_run_streaming`: v1.11.0 shipped the tool with a `POST /session/{sid}/prompt` that is silently accepted by opencode server 1.14.50 but does NOT trigger LLM execution — every dispatch produced an empty session and timed out with `SESSION_HANG`. v1.11.1 switches to `POST /session/{sid}/message` (the canonical endpoint also used by `opencode_run` / `opencode_ask`). Without this bump, `opencode_run_streaming` is non-functional in production despite the v1.1.0 skill wiring. See [opencode-mcp v1.11.1-mekareteriker.0 release](https://github.com/MekaretEriker/opencode-mcp/releases/tag/v1.11.1-mekareteriker.0).
+
 ## [1.1.0] - 2026-05-17
 
 ### Changed
