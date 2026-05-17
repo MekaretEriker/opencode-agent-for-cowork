@@ -15,3 +15,13 @@ Thumbs.db
 .opencode-agent-memory.json
 .opencode-agent-traces/
 *.plugin
+
+# Operator-specific OpenRouter roster — see AGENTS.md "OpenRouter workspace"
+# for the rationale (model list is tied to one operator's workspace and
+# should not be versioned across deployments). Sample sections of the format
+# are documented in AGENTS.md itself.
+OPENROUTER-MODELS.md
+
+# Release helper scripts — generated per release as templates, not source
+release-v*.sh
+release-v*.log
