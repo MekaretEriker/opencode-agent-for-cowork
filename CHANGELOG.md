@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-05-17
+
+### Changed
+
+- `.mcp.json` now requires `@mekareteriker/opencode-mcp@^1.12.0-mekareteriker.0` (was `^1.11.2-mekareteriker.0`). Picks up the consolidated **Phase B (MEK-296 SDK adapter foundation)** + **Phase C (MEK-297 typed SDK migration across all 9 tools/*.ts files)**:
+  - **Phase B** introduces `src/sdk-adapter.ts` exporting `createCoworkClient(opts)` — wraps the official `@opencode-ai/sdk@1.15.3` client with Cowork's 5 layers (MEK-289 directory injection, MEK-284 idempotency dedup, MEK-281 retry policy, MEK-280 lazy reconnection, MEK-282 structured errors). Plus `src/types.ts` re-exporting SDK types (`Session`, `Message`, `Part`, `Agent`, etc.).
+  - **Phase C** migrates all 9 `src/tools/*.ts` files (~67 tools total: `workflow.ts`, `message.ts`, `session.ts`, `file.ts`, `project.ts`, `config.ts`, `provider.ts`, `tui.ts`, `events.ts`) from hand-rolled `client.post/get/...` paths to typed SDK methods via a per-directory `sdkFactory: Map<string, OpencodeClient>` cache plumbed in `src/index.ts`. Each handler resolves `const sdk = sdkFactory?.(directory)` then uses `sdk ? sdk.x(...) : client.x(...)` branches. Strategy B chosen (zero changes to `client.ts`, zero changes to tests, baseline 363 passed / 5 skipped / 0 failed preserved at every commit).
+  - **MCP tool surface unchanged**: same zod schemas, same parameter names, same response formats, same structured error codes. Skills (orchestrator, fallback-chain, result-validator, safe-prompts, scheduled-recipes, task-memory, agent-roster, mcp-discovery) need no changes — they continue calling the same `opencode_*` tool names with the same arguments. Only the runtime plumbing under the hood is now typed.
+  - **3 SDK gaps documented in-code** (kept raw `client.x()` with explanatory comments): `global.health()` (not in v1 SDK), `event.subscribe()` AbortSignal (replaced with Promise.race against timeout), `provider.oauth.callback()` body width (legacy accepts `Record<string, unknown>`, SDK narrows to `{code?}`).
+  - See [opencode-mcp v1.12.0-mekareteriker.0 release](https://github.com/MekaretEriker/opencode-mcp/releases/tag/v1.12.0-mekareteriker.0) for the full CHANGELOG entry (Phase B + 9 granular Phase C commits with hashes `2c1d2ef..5a80bc4`).
+
 ## [1.1.2] - 2026-05-17
 
 ### Changed
