@@ -68,6 +68,7 @@ When this JSON block is present, **prefer parsing it over regex-matching the err
 - `AUTH_FAILED` -> **do not fallback** (re-auth needed, not a provider problem)
 - `TIMEOUT` or `SESSION_HANG` -> orchestrator's responsibility (orphaned-session recovery), not this skill
 - `EMPTY_RESPONSE` -> trigger fallback (degenerate model output)
+- `SHELL_CONTENT_REFUSED` -> **do not fallback** (deterministic wrapper-level discipline refusal — switching provider yields the same refusal). Surface the suggested action verbatim to the user: the fix is to rewrite the command in the file-first pattern (write content to a file with the client's Write tool, reference it via `--body-file` / `--notes-file` / `-F body=@file` / `< file`). See [`opencode-mcp` #28](https://github.com/MekaretEriker/opencode-mcp/issues/28) and the underlying discipline in [`opencode-mcp` #25](https://github.com/MekaretEriker/opencode-mcp/issues/25). Available from `opencode-mcp` 1.12.2 onwards.
 
 Regex matching on the human-readable line remains as a safe fallback for any error without a structured block (older opencode-mcp versions or non-wrapped tool errors).
 

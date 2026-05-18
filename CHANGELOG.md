@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-05-18
+
+### Changed
+
+- `.mcp.json` now requires `@mekareteriker/opencode-mcp@^1.12.2-mekareteriker.0` (was `^1.12.1-mekareteriker.0`). Picks up the consolidated fix lot from [`opencode-mcp` v1.12.2-mekareteriker.0](https://github.com/MekaretEriker/opencode-mcp/releases/tag/v1.12.2-mekareteriker.0) — three bug fixes that close the structured-error coverage gap exposed during the v1.1.4 release session:
+  - [`opencode-mcp` #27](https://github.com/MekaretEriker/opencode-mcp/issues/27) — `opencode_shell_execute` dedup over-application (MEK-284 cache key was not body-aware). Two distinct shell commands in the same session no longer collide, and two `session.create` calls with different `directory` headers no longer return the same session.
+  - [`opencode-mcp` #28](https://github.com/MekaretEriker/opencode-mcp/issues/28) — backtick refusal now emits `code: "SHELL_CONTENT_REFUSED"` instead of `UNKNOWN`. Consumed by the `opencode-fallback-chain` skill update below.
+  - [`opencode-mcp` #26](https://github.com/MekaretEriker/opencode-mcp/issues/26) — `EMPTY_RESPONSE` now fires when `opencode_run` / `opencode_run_streaming` / `opencode_ask` / `opencode_reply` / `opencode_message_send` complete with a zero-content assistant message. Out-of-roster OpenRouter dispatches and free-tier silent quota exhaustion no longer pretend to be success. The `opencode-fallback-chain` skill already maps `EMPTY_RESPONSE` to "trigger fallback" since v1.1.0 — that wiring now actually fires.
+- `skills/opencode-fallback-chain/SKILL.md` — added `SHELL_CONTENT_REFUSED` to the structured-error-code mapping table with a **do-not-fallback** verdict and the file-first remediation pattern. Picks up the new code from `opencode-mcp` #28. Previously the refusal surfaced as `code: "UNKNOWN"` and the skill defaulted to triggering a fallback — wasting provider quota on a deterministic refusal.
+
+### Added
+
+- **#37 — new skill `opencode-timeout-router`.** Inserted between `opencode-orchestrator` (v1.0) and `opencode-safe-prompts` (v1.1) in the dispatch chain. Two responsibilities:
+  1. **Pre-flight duration estimate + tool routing**: picks `opencode_ask` (<30s), `opencode_run` (30-60s), `opencode_run_streaming` (60-180s), or `opencode_fire` (>180s) based on a task-type estimate calibrated against `.opencode-agent-memory.json` when present. Baseline durations: `question` 15s, `bug_fix` 60s, `exploration` 120s, `feature_implementation` 180s, `multi_file_generation` 200s, `refactor` 240s. Confidence factor ∈ [0.5, 2.0] applied based on similarity to past tasks on the same project (count of prior tasks of the same type, module match, antipattern hits).
+  2. **Local idempotency (60s window)**: computes `prompt_hash = sha256(sessionId + prompt + floor(now_ms/60_000))` and refuses Cowork-side double-fires within the window — independent of the wrapper's MEK-284 idempotency dedup, runs first, catches accidental double-taps the wrapper cannot see.
+
+  Includes a Plan-Execute-Reflect integration: announces routing in the Plan phase (one-liner standard mode + dev mode dump), updates `byType.<type>.avgDurationSec` in `.opencode-agent-memory.json` in the Reflect phase via `opencode-task-memory`. Inter-skill: runs after `opencode-orchestrator`, before `opencode-safe-prompts`; reads `opencode-task-memory`; does NOT handle provider errors (that is `opencode-fallback-chain`'s job). Defense-in-depth note: the local idempotency layer becomes redundant once [`opencode-mcp #27`](https://github.com/MekaretEriker/opencode-mcp/issues/27) is universally deployed — kept as defense-in-depth for Cowork-side double-fires the wrapper cannot see. Routing logic stays useful independent of wrapper fixes.
+
+  Bilingual frontmatter triggers (FR + EN) per the v1.0.1 convention. See [issue #37](https://github.com/MekaretEriker/opencode-agent-for-cowork/issues/37) for the full spec; migrated from Linear MEK-285.
+
+  Open item: the issue references `DESIGN-opencode-agent-for-cowork.md` v8 §5.1 / §5.2 and `SPEC-plugin.md` Composant 1, neither of which are checked into this repo. The skill includes inline reproductions of the memory schema (cross-referenced to `opencode-task-memory`) and the routing pattern (cross-referenced to `opencode-orchestrator` §2 recap table). If those DESIGN/SPEC files are added later, cross-link from the new skill's "References" section.
+
 ## [1.1.4] - 2026-05-18
 
 ### Changed
