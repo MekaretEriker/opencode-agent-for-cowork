@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-05-18
+
+### Changed
+
+- `.mcp.json` now requires `@mekareteriker/opencode-mcp@^1.12.1-mekareteriker.0` (was `^1.12.0-mekareteriker.0`). Picks up the **file-first content discipline fix** from [opencode-mcp #25](https://github.com/MekaretEriker/opencode-mcp/issues/25):
+  - The `opencode_shell_execute` tool description is rewritten to redirect content-passing to the file-first pattern. Callers must write content via their client's Write tool and reference the file with `--body-file`, `--notes-file`, `-F body=@file`, or `< file` — NOT inline content with heredocs or quoted strings. Adopts the discipline-in-tool-description approach used by `NousResearch/hermes-agent` (see their `write_file` / `terminal` tool descriptions in the tools reference).
+  - Handler-level refusal: commands containing unescaped backticks (regex `/(?<!\\)\`/`) are refused with an instructive error pointing to the file-first pattern. Conservative safety net for the LLM-driving-shell escape failure mode observed across 6 distinct invocations in a Cowork session (`gh issue close --comment`, `gh release create --notes`, heredoc-based file writes).
+  - Mirror failure modes upstream: [`anomalyco/opencode#15810`](https://github.com/anomalyco/opencode/issues/15810) (closed) and [`anthropics/claude-code#29619`](https://github.com/anthropics/claude-code/issues/29619) (closed not-planned). Wrapper-side fix in our fork is the practical path; upstream PR proposing the same discipline in `bash.txt` to be opened separately.
+  - See [opencode-mcp v1.12.1-mekareteriker.0 release](https://github.com/MekaretEriker/opencode-mcp/releases/tag/v1.12.1-mekareteriker.0) for the full CHANGELOG entry.
+
+### Validation
+
+End-to-end tested on this release before tag-and-publish (2026-05-18):
+
+- **Refusal path** — `opencode_shell_execute` with a command containing an inlined unescaped backtick → wrapper refused with the documented error pointing to #25, command never reached the shell. ✅
+- **Clean path** — body containing backticks, `$VAR`, em-dashes, single+double quotes, Unicode and a code block with backticks inside → written via Cowork's `Write` tool → `opencode_shell_execute "cat file"` → contents read back byte-exact. ✅
+- **Tool description** — multi-line wording with Good/Bad examples surfaces via MCP `tools.list`. ✅
+
+### Known issues (tracked, not fixed in this release)
+
+- [opencode-mcp#26](https://github.com/MekaretEriker/opencode-mcp/issues/26) — `EMPTY_RESPONSE` structured error doesn't fire when a session completes idle with zero assistant content (e.g. dispatching an out-of-roster OpenRouter model silent-fails as `completed`). Workaround: consult `OPENROUTER-MODELS.md` before dispatch; never use models outside the allowed roster.
+- [opencode-mcp#27](https://github.com/MekaretEriker/opencode-mcp/issues/27) — `opencode_shell_execute` returns the first call's result for all subsequent calls in the same session (MEK-284 idempotency dedup over-applies). Workaround: create a fresh session per command, or chain ops with `&&` in a single call.
+- [opencode-mcp#28](https://github.com/MekaretEriker/opencode-mcp/issues/28) — The backtick refusal emits structured-error `code: "UNKNOWN"` instead of a dedicated `SHELL_CONTENT_REFUSED` / `INVALID_INPUT`. Polish item; the `opencode-fallback-chain` skill might retry a deterministic refusal unnecessarily until this is fixed.
+
+### Skills
+
+Unchanged. The shell content discipline lives in the wrapper's tool description and refusal logic, picked up automatically by any Cowork Claude reading the tool surface — no skill update required for this release.
+
 ## [1.1.3] - 2026-05-17
 
 ### Changed

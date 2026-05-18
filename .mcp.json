@@ -2,7 +2,7 @@
   "mcpServers": {
     "opencode": {
       "command": "npx",
-      "args": ["-y", "@mekareteriker/opencode-mcp@^1.12.0-mekareteriker.0"],
+      "args": ["-y", "@mekareteriker/opencode-mcp@^1.12.1-mekareteriker.0"],
       "env": {
         "OPENCODE_DEFAULT_PROVIDER": "${OPENCODE_DEFAULT_PROVIDER}"
       }
