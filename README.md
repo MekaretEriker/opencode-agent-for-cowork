@@ -3,9 +3,9 @@
 > Cowork plugin that turns Cowork into an intelligent orchestrator for [OpenCode](https://github.com/anomalyco/opencode). Delegate coding tasks, monitor sessions, validate results — all from natural-language conversations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.4-blue.svg)](CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-feature--complete-success.svg)](#roadmap)
-[![Built on opencode-mcp](https://img.shields.io/badge/built%20on-opencode--mcp%20%5E1.10.1-orange.svg)](https://github.com/AlaeddineMessadi/opencode-mcp)
+[![Built on opencode-mcp](https://img.shields.io/badge/built%20on-%40mekareteriker%2Fopencode--mcp%20%5E1.12.1-orange.svg)](https://github.com/MekaretEriker/opencode-mcp)
 [![For Cowork](https://img.shields.io/badge/for-Cowork-purple.svg)](https://anthropic.com)
 [![Plugin format](https://img.shields.io/badge/format-.plugin-lightgrey.svg)](#installation)
 
@@ -52,6 +52,7 @@
 - [Architecture](#architecture)
 - [Composability with user MCPs](#composability-with-user-mcps)
 - [Coexistence with OpenCode Desktop](#coexistence-with-opencode-desktop)
+- [Related projects](#related-projects)
 - [Known limitations](#known-limitations)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -258,7 +259,7 @@ If OpenCode Desktop is already running, this plugin reuses the same local server
 
 | # | Limitation | Mitigation in plugin |
 |---|---|---|
-| L1 | `opencode-mcp` validation can reject valid absolute paths in the `directory` parameter (false positive on `/mnt/d/...` paths) | Workaround documented in `orchestrator` skill: prefix prompts with `cd /path && ` instead of passing `directory` |
+| L1 | ~~`opencode-mcp` validation can reject valid absolute paths in the `directory` parameter (false positive on `/mnt/d/...` paths)~~ | ✅ Resolved in v1.0.2 via `@mekareteriker/opencode-mcp` fork (MEK-289 WSL/Windows path translation). The `cd $path &&` workaround is no longer needed. |
 | L2 | MCP transport has a ~180s timeout that overrides `maxDurationSeconds` | Orchestrator defaults to `fire+check` for tasks > 3 min; recovers orphaned sessions via `sessions_overview` |
 | L3 | Skills are markdown instructions, not event-driven hooks. Stall detection works only while Cowork is actively piloting the task | Documented in each skill's "Limits" section |
 | L4 | WSL ↔ Windows mount can have cache lag for newly written files | Plugin packaging uses dual-naming (`opencode-agent.plugin` + `opencode-agent-v<version>.plugin`) to bypass cache |
@@ -314,6 +315,7 @@ Other orchestration approaches in the OpenCode ecosystem:
 | **This plugin** | Cowork-side | Skills inside Cowork tell Claude how to delegate to OpenCode. Single OpenCode `build`/`plan` agent per task. |
 | [tempont/small-opencode-orchestrator](https://github.com/tempont/small-opencode-orchestrator) | **OpenCode-side** | Native OpenCode config with ~10 custom agents (`orchestrator`, `plan-runner`, `code-executor`, `code-explorer`, reviewers…). Model tiering per role (strong models for orchestrator, cheap models for subagents). Plans persisted to disk with explicit approval gates. |
 | [apoapps/swarm-code-plugin](https://github.com/apoapps/swarm-code-plugin) | Claude Code-side | Claude Code orchestrates OpenCode as a worker via tmux pipe-pane + keyword watcher. ~80% token savings reported. |
+| [code-yeongyu/oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) | **Terminal-side** | Shell integration layer (zsh/bash/fish) for developers who live in the terminal. Brings OpenCode into your shell workflow with keyboard shortcuts, live streaming output, and shell hooks. 54.9k★ |
 
 These are **complementary, not competing**. In theory, you can compose:
 
@@ -328,6 +330,15 @@ Cowork (this plugin) ─► OpenCode (tempont config) ─► subagents (tempont)
 ```
 
 Three levels of orchestration — overkill for most cases, but theoretically powerful for large/critical projects. Pick the layer that matches your workflow.
+
+### Coexistence with oh-my-openagent
+
+[oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) and this plugin live at **different layers** of the same stack — they coexist without conflict:
+
+- **oh-my-openagent** owns the *terminal experience*: shell integration, keyboard shortcuts, live streaming output in your zsh/bash/fish session. Ideal for developers who want OpenCode tightly woven into their terminal workflow.
+- **This plugin** owns the *Cowork orchestration layer*: natural-language delegation, multi-session parallelism, per-project memory, result validation, provider fallback. Ideal for developers who work from Cowork conversations.
+
+You can use both simultaneously — oh-my-openagent for your own direct OpenCode sessions in the terminal, this plugin for everything Cowork delegates to OpenCode. Both talk to the same local `opencode serve` instance with no conflict.
 
 ## Credits
 

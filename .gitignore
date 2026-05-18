@@ -25,3 +25,4 @@ OPENROUTER-MODELS.md
 # Release helper scripts — generated per release as templates, not source
 release-v*.sh
 release-v*.log
+.obsidian
