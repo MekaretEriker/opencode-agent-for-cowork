@@ -3,7 +3,7 @@
 > Cowork plugin that turns Cowork into an intelligent orchestrator for [OpenCode](https://github.com/anomalyco/opencode). Delegate coding tasks, monitor sessions, validate results — all from natural-language conversations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.4-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-feature--complete-success.svg)](#roadmap)
 [![Built on opencode-mcp](https://img.shields.io/badge/built%20on-%40mekareteriker%2Fopencode--mcp%20%5E1.12.1-orange.svg)](https://github.com/MekaretEriker/opencode-mcp)
 [![For Cowork](https://img.shields.io/badge/for-Cowork-purple.svg)](https://anthropic.com)
