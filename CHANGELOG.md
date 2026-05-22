@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-05-22
+
+### Changed
+
+- `.mcp.json` now requires `@mekareteriker/opencode-mcp@^1.13.0-mekareteriker.0` (was `^1.12.2-mekareteriker.0`). Picks up the **cross-OS directory resolution fix** from [`opencode-mcp` v1.13.0-mekareteriker.0](https://github.com/MekaretEriker/opencode-mcp/releases/tag/v1.13.0-mekareteriker.0):
+  - [`opencode-mcp` #33](https://github.com/MekaretEriker/opencode-mcp/issues/33) — POSIX-only paths (`/home/...`, `/root/...`, `/tmp/...`, `/Users/...`) passed to the `directory` parameter of any MCP tool now ship verbatim to the OpenCode server when the Cowork client is Windows and the server is Linux/WSL. Previously, Node's `path.resolve()` under Windows semantics mangled these paths to `C:\home\...` which never exists on the Windows side, producing a cryptic `Directory not found` error that masked the real Linux-side filesystem. `/mnt/<drive>/...` paths worked by accident; everything else (POSIX rootfs, `/home/`, `/etc/`, `/usr/`, `/tmp/`, etc.) was unreachable.
+  - New `OPENCODE_MCP_SERVER_OS=linux|win32|darwin|auto` env var (default `auto`) as an escape hatch for the symmetric case (Linux client + Windows server). Auto-inference from input shape + client OS covers the canonical Cowork-on-Windows + OpenCode-in-WSL deployment.
+  - All existing behavior preserved: Windows-on-Windows, `/mnt/<drive>/...` translation (MEK-289), `OPENCODE_MCP_TRANSLATE_PATHS`.
+
+### Notes
+
+- **Semver gotcha**: this is a wrapper minor bump (`1.12.2` → `1.13.0`) and per npm's strict caret semantics with prereleases, `^1.12.2-mekareteriker.0` would NOT have picked up `1.13.0-mekareteriker.0` automatically — hence the explicit range bump in this release. Documented in both `CLAUDE.md` files.
+- **Skill surface unchanged**: no new skills, no new wrapper tools wired. The fix is transparent at the plugin layer — users who were blocked passing POSIX paths from Cowork (Windows) to OpenCode (Linux/WSL) on POSIX-rooted projects (Obsidian vaults under `/home/<user>/`, config trees under `/etc/`, etc.) will simply find them working after the bump.
+
 ## [1.2.0] - 2026-05-18
 
 ### Changed
