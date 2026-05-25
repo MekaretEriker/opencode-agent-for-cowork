@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-05-25
+
+### Added
+
+- **opencode-mcp 1.14.0 dep bump + skill update for `opencode_write_file` (file-first discipline against the upstream `write` tool stall).** `@mekareteriker/opencode-mcp` v1.14.0 exposes a new tool, `opencode_write_file({ sessionId, path, content, agent, ... })`, that materializes a file on the session host via a base64-decode pipeline so that file content never enters the LLM tool-call stream. This bypasses the upstream OpenCode bug ([opencode-mcp #39](https://github.com/MekaretEriker/opencode-mcp/issues/39)) where the native `write` tool stalls indefinitely on prose / markdown payloads containing backticks, em-dashes, accented characters, or fenced code blocks when dispatched through DeepSeek/OpenRouter (`deepseek-v4-pro`, `deepseek-v4-flash` both reproduced).
+
+  **Semver gotcha respected:** `.mcp.json` bumped from `^1.13.0-mekareteriker.0` to `^1.14.0-mekareteriker.0`. Caret semantics with prerelease tags are strict — without the explicit minor bump, the plugin would silently pin to the old version and the new tool would never become visible to the LLM. Same trap as the v1.0.3 → v1.1.0 bump documented in `CLAUDE.md`.
+
+  **Skill update (`opencode-orchestrator`):** new section "2.5 File-first discipline — when to use `opencode_write_file`" that gives the LLM an explicit decision rule for picking between the native `write` tool and the new wrapper. The rule fires when the content is ≥ 30 lines, OR contains backticks / em-dashes / accents / fenced code blocks, OR is destined for a `gh issue create --body-file` / `gh pr create --body-file` payload (matches the file-first pattern already preached by `opencode_shell_execute` since #25). Pattern: compose content in Cowork → `opencode_write_file` to /tmp → `opencode_shell_execute` with `--body-file`. Cross-references to Hermes (which sidesteps the bug architecturally by keeping small file writes on its own side) explain why our wrapper-based approach is the right shape for the Cowork orchestration layer.
+
+  **Why this matters operationally:** before v1.3.0, when an LLM tried to write a long markdown body via its native `write` tool (e.g. for a `gh pr create`), the session would go `[busy]` indefinitely and only abort could recover. Cowork or skilled users worked around this by hand-encoding base64 and piping through `opencode_shell_execute`. With v1.3.0 the skill teaches the orchestrator to make this choice automatically, and `opencode_write_file` is one MCP call instead of a multi-step ad-hoc pipeline.
+
+  No code changes to scheduled-tasks or other skills. No new commands. Drop-in upgrade.
+
+  Closes opencode-mcp#39 from the Cowork side.
+
 ## [1.2.1] - 2026-05-22
 
 ### Changed
