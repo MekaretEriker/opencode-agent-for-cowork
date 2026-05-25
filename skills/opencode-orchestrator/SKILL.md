@@ -158,6 +158,47 @@ Announce to user (ReAct): "The MCP tool has an internal timeout of ~180s. The ta
 
 ---
 
+## 2.5 File-first discipline — when to use `opencode_write_file` (v1.3.0)
+
+OpenCode's native `write` tool stalls indefinitely on prose / markdown payloads ~1.5 KB+ containing backticks, em-dashes, accented characters, or fenced code blocks when dispatched through DeepSeek/OpenRouter (`deepseek-v4-pro`, `deepseek-v4-flash` both reproduced — see [opencode-mcp issue #39](https://github.com/MekaretEriker/opencode-mcp/issues/39)). The session goes `[busy]` indefinitely, the file is never materialized, and abort is the only recovery.
+
+Since opencode-mcp v1.14.0 we expose `opencode_write_file({ sessionId, path, content, agent, ... })` — a wrapper that base64-encodes the content in Node and dispatches via `session.shell`. The content never enters the LLM stream, so the upstream stall cannot occur.
+
+### Decision rule
+
+**Use `opencode_write_file` instead of asking the LLM to call its native `write` tool whenever ANY of the following holds:**
+
+- The content is prose / markdown ≥ 30 lines.
+- The content contains backticks (`` ` ``), em-dashes (`—`), or any non-ASCII character (accented French, CJK, emoji, etc.).
+- The content contains fenced code blocks (```` ``` ````).
+- The content is destined for a `gh issue create --body-file`, `gh pr create --body-file`, or any similar `--*-file` flag (matches the file-first pattern already enforced by `opencode_shell_execute` since #25).
+
+For short single-line ASCII writes (config tweaks, one-line README updates), the native `write` tool is fine — the bug doesn't trigger and adding a base64 round-trip is overkill.
+
+### Pattern (Cowork orchestrator perspective)
+
+When the user asks you to dispatch a task that produces a long PR/issue body or a markdown report:
+
+1. Compose the body content yourself (in Cowork) or have OpenCode produce it in-conversation rather than via a write tool call.
+2. Call `opencode_write_file({ path: "/tmp/body.md", content: "<the prose>", sessionId, agent: "build" })`.
+3. Then call `opencode_shell_execute({ command: "gh pr create --body-file /tmp/body.md ...", agent: "build", sessionId })`.
+
+This is the same two-step dance that `opencode_shell_execute`'s description has been preaching since #25 ("write the content to a file FIRST via your client's Write/file tool, then reference the file in this command with --body-file") — but now the "Write/file tool" can be `opencode_write_file` (server-side materialization) rather than relying on Cowork having direct filesystem reach into the session host.
+
+### Cross-reference with Hermes
+
+`zaycruz/hermes-opencode-plugin` does not implement an equivalent because it sidesteps the bug architecturally: Hermes keeps small file writes on its own side via native `terminal`/`read_file` tools and only delegates "real engineering" (multi-file refactors) to OpenCode. Cowork has no such terminal tool, so we need `opencode_write_file` as a first-class MCP surface.
+
+### Recap table delta
+
+| Situation | Tool | Reason |
+|---|---|---|
+| Write < 30 lines of pure-ASCII config | LLM native `write` (in the prompt) | Stall doesn't trigger, no overhead |
+| Write ≥ 30 lines OR any backticks/em-dashes/accents/fences | `opencode_write_file` | Bypasses #39 stall; content never enters LLM stream |
+| `gh issue create --body-file` / `gh pr create --body-file` payload | `opencode_write_file` then `opencode_shell_execute` | File-first discipline (since #25) |
+
+---
+
 ## 3. Choosing the OpenCode agent (build / plan / @general)
 
 OpenCode (see anomalyco/opencode) natively includes two main agents + one sub-agent.
